@@ -2,17 +2,21 @@ import rclpy
 from rclpy.node import Node
 import numpy as np
 import math
+import cv2
+from cv_bridge import CvBridge, CvBridgeError # Package to convert between ROS and OpenCV Images
 
 # Message types
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import Image
+from amr_interfaces.msg import Num
 
 class AssignmentNode(Node):
     def __init__(self):
         super().__init__("assignment_node")
 
-        self.state = "fwd"
+        self.state = "halt"
         self.dist_ahead = 100
         self.heading = 0
 
@@ -20,12 +24,61 @@ class AssignmentNode(Node):
         self.desired_heading = 0.0
         self.heading_accept_error = 0.1
 
+        self.depth_data = None
+
+        self.br = CvBridge()
+
         # Publishers
         self.drive_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
         # Subscriptions
         self.laser_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
         self.odom_sub = self.create_subscription(Odometry, "/odom", self.odom_callback, 20)
+
+        self.create_subscription(Image, '/limo/depth_camera_link/image_raw', self.camera_callback, 1)
+        # self.create_subscription(Image, '/limo/depth_camera_link/depth/image_raw', self.depth_callback, 1)
+
+    def camera_callback(self, data: Image):
+        cv2.namedWindow("Image window", 1)
+        # cv2.namedWindow("Raw image", 1)
+        try:
+            cv_image = self.br.imgmsg_to_cv2(data, "bgr8")
+            cv_image_copy = cv_image.copy()
+        except CvBridgeError as e:
+            print(e)
+
+        hsv_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+
+        hsv_thresh = cv2.inRange(hsv_img,
+                                 np.array((0, 20, 20)),
+                                 np.array((255, 255, 255)))
+        
+        hsv_contours, hierachy = cv2.findContours(
+            hsv_thresh.copy(),
+            cv2.RETR_TREE,
+            cv2.CHAIN_APPROX_SIMPLE)
+        
+        for c in hsv_contours:
+            # This allows to compute the area (in pixels) of a contour
+            a = cv2.contourArea(c)
+            # and if the area is big enough, we draw the outline
+            # of the contour (in blue)
+            if a > 100.0:
+                cv2.drawContours(cv_image, c, -1, (255, 0, 0), 10)
+            
+            M = cv2.moments(c)
+            if ['m00'] != 0:
+                cx = int(M['m10']/M['m00'])
+                cy = int(M['m01']/M['m00'])
+                cv2.circle(cv_image, (cx, cy), 7, (0, 0, 255), -1)
+                if self.depth_data is not None:
+                    cv2.putText(cv_image, f"Depth: {round(self.depth_data[cy][cx], 2)}", (cx - 20, cy - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+                # cv2.putText(cv_image, f"X {cx}, Y: {cy}", (cx - 20, cy - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+        
+        cv2.imshow("Image window", cv_image)
+        # cv2.imshow("Raw image", cv_image_copy)
+        cv2.waitKey(1)
 
     def scan_callback(self, msg: LaserScan):
         length = len(msg.ranges)
@@ -45,6 +98,8 @@ class AssignmentNode(Node):
             msg.angular.z = 0.6
         if self.state == 'rev':
             msg.linear.x = 0.05
+        if self.state == 'halt':
+            return
         self.drive_pub.publish(msg)
     
     def odom_callback(self, msg: Odometry):

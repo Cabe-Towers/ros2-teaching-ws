@@ -13,6 +13,9 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
+        # Allows config and util files to be imported by code
+        ('lib/' + package_name, [package_name + '/config.py']),
+        ('lib/' + package_name, [package_name + '/util.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,6 +27,8 @@ setup(
     entry_points={
         'console_scripts': [
             'assignment_node = amr_assignment_pkg.assignment_node:main',
+            'main_start = amr_assignment_pkg.main_start:main',
+            'global_reference_frame = amr_assignment_pkg.global_reference_frame:main'
         ],
     },
 )
