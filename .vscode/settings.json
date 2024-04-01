@@ -1,0 +1,24 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/opt/ros/lcas/install/voice_control/lib/python3.10/site-packages",
+        "/opt/ros/lcas/install/uol_tidybot_control/lib/python3.10/site-packages",
+        "/opt/ros/lcas/install/uol_tidybot/lib/python3.10/site-packages",
+        "/opt/ros/lcas/install/limo_msgs/local/lib/python3.10/dist-packages",
+        "/opt/ros/lcas/install/limo_gazebosim/local/lib/python3.10/dist-packages",
+        "/opt/ros/lcas/install/cmp3103m_ros2_code_fragments/lib/python3.10/site-packages",
+        "/opt/ros/lcas/install/astra_camera_msgs/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/opt/ros/lcas/install/voice_control/lib/python3.10/site-packages",
+        "/opt/ros/lcas/install/uol_tidybot_control/lib/python3.10/site-packages",
+        "/opt/ros/lcas/install/uol_tidybot/lib/python3.10/site-packages",
+        "/opt/ros/lcas/install/limo_msgs/local/lib/python3.10/dist-packages",
+        "/opt/ros/lcas/install/limo_gazebosim/local/lib/python3.10/dist-packages",
+        "/opt/ros/lcas/install/cmp3103m_ros2_code_fragments/lib/python3.10/site-packages",
+        "/opt/ros/lcas/install/astra_camera_msgs/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}
