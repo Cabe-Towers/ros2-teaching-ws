@@ -9,7 +9,7 @@ def makePoint(x, y, z=0.0) -> Point:
     p.z = z
     return p
 
-def scan_to_cartesian_points(scan_data, angle_min, angle_max):
+def scan_to_cartesian_points(scan_data, angle_min, angle_max) -> list:
     total_angle = abs(angle_min) + angle_max
 
     points = []
@@ -30,12 +30,17 @@ class LineSegment:
         self.start_idx = start_idx
         self.end_idx = end_idx
 
-    def distance_from_line(self, x, y):
+    def distance_from_line(self, x, y) -> float:
         # Calculates perpendicular distance of a point from a line
         # Perpendicular distance formula: d = (ax + by + c) / sqrt(a^2 + b^2) or d = (mx - y + c) / sqrt(m^2 + 1)
         return abs(self.slope * x - y + self.intercept) / math.sqrt(self.slope**2 + 1)
+    
+    def get_line_intersection(self, line) -> tuple:
+        x = (self.intercept - line.intercept) / (line.slope - self.slope)
+        y = self.slope * x + self.intercept
+        return x, y
 
-    def closest_point_on_line(self, p):
+    def closest_point_on_line(self, p) -> np.array:
         m = self.slope
         b = self.intercept
         # Get the equation of the perpendicular line that passes through point p

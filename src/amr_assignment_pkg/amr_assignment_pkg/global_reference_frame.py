@@ -7,7 +7,10 @@ import util
 from util import LineSegment
 import warnings
 from config import get_config
+from typing import List
 cfg = get_config()
+
+CONST_90_DEG_RADIANS = math.radians(90)
 
 warnings.simplefilter('ignore', np.RankWarning)
 
@@ -28,6 +31,7 @@ class GRFNode(Node):
         # Publishers
         self.wall_vis_pub = self.create_publisher(Marker, "/wall_vis", 20)
         self.wall_vis_pub_test = self.create_publisher(Marker, "/wall_vis_test", 20)
+        self.corner_pub = self.create_publisher(Marker, "/arena_corner", 20)
 
         # Subscribers
         self.laser_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
@@ -140,7 +144,7 @@ class GRFNode(Node):
             segments.append(LineSegment(slope, intercept, start_idx, len(segment) + start_idx - 1))
             segment_start_idx += cfg.SCAN_LINE_SEGMENT_LENGTH
 
-        joined_segments = []
+        joined_segments: List[LineSegment] = []
         prev_seg = None
         prev_segment_joined_flag = False
         # Loop over segments, compare previous and current segment and decide whether they should be joined
@@ -168,9 +172,24 @@ class GRFNode(Node):
                         prev_segment_joined_flag = False
                     # else discard previous line
                     prev_seg = seg
-
+        
+        corner_points: List[Point] = []
+        for seg in joined_segments:
+            for seg2 in joined_segments:
+                if seg == seg2: continue
+                angle = abs(math.atan((seg.slope - seg2.slope) / (1 + seg.slope * seg2.slope)))
+                if (abs(angle - CONST_90_DEG_RADIANS) < cfg.LINE_CORNER_ANGLE_THRESH):
+                    x, y = seg.get_line_intersection(seg2)
+                    exist_flag = False
+                    for point in corner_points:
+                        if point.x == x and point.y == y:
+                            exist_flag = True
+                            break
+                    if not exist_flag:
+                        corner_points.append(util.makePoint(x, y))
+    
         ## Visualize walls in rviz
-        marker_points = []    
+        marker_points = []
         for seg in joined_segments:
             # Map last point covered by segment to closest point on segment line
             start_x, start_y = seg.closest_point_on_line(np.array([points[seg.start_idx][0], points[seg.start_idx][1]]))
@@ -196,6 +215,8 @@ class GRFNode(Node):
         
         self.visualize_segments(marker_points, rgba=(1.0, 0.0, 0.0, 0.5), scale=0.02, publisher=self.wall_vis_pub_test)
 
+        self.visualise_points(corner_points, (1.0, 0.0, 0.0, 0.5))
+
         ##
             
     def visualize_segments(self, segment_points, rgba = (0.0, 1.0, 0.0, 0.5), scale = 0.05, publisher = None):
@@ -220,6 +241,30 @@ class GRFNode(Node):
             mk.points.append(line[1])
         
         if publisher is None: self.wall_vis_pub.publish(mk)
+        else: publisher.publish(mk)
+
+    def visualise_points(self, points, rgba = (0.0, 1.0, 0.0, 0.5), scale = 0.05, publisher = None):
+        mk = Marker()
+        mk.header.frame_id = '/laser_link'
+        mk.id = 0
+        mk.header.stamp = self.get_clock().now().to_msg()
+        mk.ns = "corners"
+        mk.action = Marker.ADD
+        mk.lifetime = Duration(seconds=1).to_msg()
+
+        mk.type = Marker.SPHERE_LIST
+        mk.scale.x = scale
+        mk.scale.y = scale
+
+        mk.color.r = rgba[0]
+        mk.color.g = rgba[1]
+        mk.color.b = rgba[2]
+        mk.color.a = rgba[3]
+
+        for point in points:
+            mk.points.append(point)
+        
+        if publisher is None: self.corner_pub.publish(mk)
         else: publisher.publish(mk)
 
 
