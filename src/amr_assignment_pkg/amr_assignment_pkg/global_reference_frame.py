@@ -4,6 +4,7 @@ from rclpy.time import Duration
 import numpy as np
 import math
 import util
+from util import LineSegment
 import warnings
 from config import get_config
 cfg = get_config()
@@ -14,41 +15,6 @@ warnings.simplefilter('ignore', np.RankWarning)
 from sensor_msgs.msg import LaserScan
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
-
-def makePoint(x, y, z=0.0) -> Point:
-    p = Point()
-    p.x = x
-    p.y = y
-    p.z = z
-    return p
-
-class LineSegment:
-    def __init__(self, slope: float, intercept: float, start_idx: int, end_idx: int):
-        self.slope = slope
-        self.intercept = intercept
-        self.start_idx = start_idx
-        self.end_idx = end_idx
-
-    def closest_point_on_line(self, p):
-        m = self.slope
-        b = self.intercept
-        # Get the equation of the perpendicular line that passes through point p
-        if m == 0:
-            perp_m = np.inf  # Line is horizontal, perpendicular line will be vertical
-            perp_b = p[0]  # Perpendicular line will pass through x-coordinate of p
-        else:
-            perp_m = -1/m  # Slope of the perpendicular line is negative reciprocal of m
-            perp_b = p[1] - perp_m * p[0]  # Perpendicular line equation using point-slope form
-
-        # Find the intersection point of the two lines
-        if perp_m == np.inf:
-            x_intersect = p[0]  # If the line is horizontal, x-coordinate of intersection is same as p's x
-            y_intersect = m * x_intersect + b  # Solve for y using the equation of the original line
-        else:
-            x_intersect = (b - perp_b) / (perp_m - m)  # Solve for x-coordinate of intersection
-            y_intersect = perp_m * x_intersect + perp_b  # Solve for y-coordinate using the equation of the perpendicular line
-
-        return np.array([x_intersect, y_intersect])
 
 class GRFNode(Node):
     def __init__(self):
@@ -98,11 +64,6 @@ class GRFNode(Node):
             slope = 1/slope
 
         return slope, intercept
-    
-    def distance_from_line(self, x, y, slope, intercept):
-        # Calculates perpendicular distance of a point from a line
-        # Perpendicular distance formula: d = (ax + by + c) / sqrt(a^2 + b^2) or d = (mx - y + c) / sqrt(m^2 + 1)
-        return abs(slope * x - y + intercept) / math.sqrt(slope**2 + 1)
     
     def find_walls(self):
         if self.points is None: return
@@ -186,8 +147,8 @@ class GRFNode(Node):
             end_x, end_y = seg.closest_point_on_line(np.array([points[seg.end_idx - 1][0], points[seg.end_idx - 1][1]]))
 
             marker_points.append([
-            makePoint(start_x, start_y), # Start point
-            makePoint(end_x, end_y), # End point
+            util.makePoint(start_x, start_y), # Start point
+            util.makePoint(end_x, end_y), # End point
             ])
 
         self.visualize_segments(marker_points)
@@ -199,8 +160,8 @@ class GRFNode(Node):
             end_x, end_y = seg.closest_point_on_line(np.array([points[seg.end_idx - 1][0], points[seg.end_idx - 1][1]]))
 
             marker_points.append([
-            makePoint(start_x, start_y, 1.0), # Start point
-            makePoint(end_x, end_y, 1.0), # End point
+            util.makePoint(start_x, start_y, 1.0), # Start point
+            util.makePoint(end_x, end_y, 1.0), # End point
             ])
         
         self.visualize_segments(marker_points, rgba=(1.0, 0.0, 0.0, 0.5), scale=0.02, publisher=self.wall_vis_pub_test)
