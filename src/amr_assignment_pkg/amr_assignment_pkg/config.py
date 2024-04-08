@@ -8,6 +8,9 @@ class Config:
     LINE_SLOPE_JOIN_THRESH = math.radians(18)
     LINE_GAP_JOIN_THRESH = 0.4
     SCAN_POINT_MAX_DENSITY = 0.03
+    SCAN_POINT_OUTLIER_THRESH = 0.1
+
+    LINE_CORNER_ANGLE_THRESH = math.radians(10)
 
 def get_config() -> Config:
     cfg = Config()

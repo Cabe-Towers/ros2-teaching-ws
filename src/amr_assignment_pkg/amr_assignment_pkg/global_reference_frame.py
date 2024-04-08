@@ -37,7 +37,7 @@ class GRFNode(Node):
             self.dist_ahead = data.ranges[len(data.ranges)//2]
             self.points = util.scan_to_cartesian_points(data.ranges, cfg.LIDAR_MIN_ANGLE, cfg.LIDAR_MAX_ANGLE)
 
-    def fit_line(self, points):
+    def fit_line(self, points, remove_outliers=True):
         x = np.array([point[0] for point in points])
         y = np.array([point[1] for point in points])
 
@@ -58,6 +58,42 @@ class GRFNode(Node):
 
         # Fit 1st degree polynomial (straight line) using least squares method
         slope, intercept = np.polyfit(x, y, 1)
+
+        if remove_outliers:
+            # Calculate distances for each index
+            distances = []
+            seg = LineSegment(slope, intercept, 0,0)
+            for i in range(len(x)):
+                distances.append(seg.distance_from_line(x[i], y[i]))
+            
+            q75 = np.percentile(distances, [75])
+            
+            valid_idxs = []
+            # Check if data point is an outlier, if not add to valid_idxs
+            for idx, dist in enumerate(distances):
+                if dist - cfg.SCAN_POINT_OUTLIER_THRESH < q75:
+                    valid_idxs.append(idx)
+            
+            # Check if there are any outliers
+            if len(valid_idxs) != len(x) and len(valid_idxs) != 0:
+                # Remove outliers from data
+                x_1 = x[valid_idxs]
+                y_1 = y[valid_idxs]
+                
+                # After removing outliers, check verticality again
+                x_std = np.std(x_1)
+                y_std = np.std(y_1)
+
+                # Check if verticality is > 1.5, specific value not hugely important
+                if (y_std/x_std > 1.5):
+                    tmp = x_1
+                    x_1 = y_1
+                    y_1 = tmp
+                    swapped = not swapped
+                
+                # Recalculate line of best fit
+                # self.get_logger().info(f"Len x_1: {len(x_1)}")
+                slope, intercept = np.polyfit(x_1, y_1, 1)
 
         if swapped:
             intercept = -intercept / slope
@@ -90,25 +126,19 @@ class GRFNode(Node):
 
         # Calculate line segments from lidar scan
         segments = []
-        segment_num = 0
-        while segment_num < len(points):
+        segment_start_idx = 0
+        while segment_start_idx < len(points):
             # If end reached, next segment contains all points to the end
-            if len(points) - segment_num < cfg.SCAN_LINE_SEGMENT_LENGTH:
-                segment = points[segment_num:]
+            if len(points) - segment_start_idx < cfg.SCAN_LINE_SEGMENT_LENGTH:
+                segment = points[segment_start_idx:]
             else: # Segment contains specified number of points
-                segment = points[segment_num:segment_num + cfg.SCAN_LINE_SEGMENT_LENGTH + 1]
+                segment = points[segment_start_idx:segment_start_idx + cfg.SCAN_LINE_SEGMENT_LENGTH + 1]
 
-            slope, intercept = self.fit_line([segment[0], segment[-1]])
-            start_idx = segment_num
+            slope, intercept = self.fit_line(segment, remove_outliers=False)
+            start_idx = segment_start_idx
 
-            # If at end of the list, set segment end to
-            # if segment_num + cfg.SCAN_LINE_SEGMENT_LENGTH >= len(points):
-            #     segment_num = len(points)
-            # else:
-            #     segment_num += cfg.SCAN_LINE_SEGMENT_LENGTH
-
-            segments.append(LineSegment(slope, intercept, start_idx, len(segment) + start_idx))
-            segment_num += cfg.SCAN_LINE_SEGMENT_LENGTH
+            segments.append(LineSegment(slope, intercept, start_idx, len(segment) + start_idx - 1))
+            segment_start_idx += cfg.SCAN_LINE_SEGMENT_LENGTH
 
         joined_segments = []
         prev_seg = None
@@ -118,7 +148,7 @@ class GRFNode(Node):
                 if prev_seg == None: 
                     prev_seg = seg
                     continue
-
+                
                 # If segments have similar slope and end/start within threshold, join segments
                 if (abs((seg.slope - prev_seg.slope) / (1 + seg.slope * prev_seg.slope)) <= cfg.LINE_SLOPE_JOIN_THRESH and 
                     abs(points[prev_seg.end_idx][0] - points[seg.start_idx][0]) + abs(points[prev_seg.end_idx][1] - points[seg.start_idx][1]) <= cfg.LINE_GAP_JOIN_THRESH):
