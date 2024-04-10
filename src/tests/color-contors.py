@@ -12,6 +12,14 @@ from cv_bridge import CvBridge, CvBridgeError # Package to convert between ROS a
 import cv2
 import numpy as np
 
+def truncate(f, n):
+    '''Truncates/pads a float f to n decimal places without rounding'''
+    s = '{}'.format(f)
+    if 'e' in s or 'E' in s:
+        return '{0:.{1}f}'.format(f, n)
+    i, p, d = s.partition('.')
+    return '.'.join([i, (d+'0'*n)[:n]])
+
 class ColourContours(Node):
     def __init__(self):
         super().__init__('colour_contours')
@@ -27,7 +35,7 @@ class ColourContours(Node):
         #self.get_logger().info("camera_callback")
 
         cv2.namedWindow("Image window", 1)
-        cv2.namedWindow("Raw image", 1)
+        # cv2.namedWindow("Raw image", 1)
         try:
             cv_image = self.br.imgmsg_to_cv2(data, "bgr8")
             cv_image_copy = cv_image.copy()
@@ -86,12 +94,12 @@ class ColourContours(Node):
                 cv2.drawContours(cv_image, c, -1, (255, 0, 0), 10)
             
             M = cv2.moments(c)
-            if ['m00'] != 0:
+            if M['m00'] != 0:
                 cx = int(M['m10']/M['m00'])
                 cy = int(M['m01']/M['m00'])
                 cv2.circle(cv_image, (cx, cy), 7, (0, 0, 255), -1)
                 if self.depth_data is not None:
-                    cv2.putText(cv_image, f"Depth: {round(self.depth_data[cy][cx], 2)}", (cx - 20, cy - 20),
+                    cv2.putText(cv_image, f"Depth: {truncate(self.depth_data[cy][cx], 2)} X, Y: {cx}, {cy}", (cx - 20, cy - 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
                 
@@ -99,7 +107,7 @@ class ColourContours(Node):
 
         #cv_image_small = cv2.resize(cv_image, (0,0), fx=0.4, fy=0.4) # reduce image size
         cv2.imshow("Image window", cv_image)
-        cv2.imshow("Raw image", cv_image_copy)
+        # cv2.imshow("Raw image", cv_image_copy)
         cv2.waitKey(1)
 
     def depth_callback(self, data: Image):

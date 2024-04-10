@@ -12,6 +12,12 @@ class Config:
 
     LINE_CORNER_ANGLE_THRESH = math.radians(10)
 
+    DEPTH_CAMERA_WIDTH = 640
+    DEPTH_CAMERA_HEIGHT = 480
+    DEPTH_BOX_Z_ADJUST = 0.02
+    CAMERA_EXCLUDE_EDGES_X = 20
+    CAMERA_EXCLUDE_EDGES_Y = 20
+
 def get_config() -> Config:
     cfg = Config()
     return cfg

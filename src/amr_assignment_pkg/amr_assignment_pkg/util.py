@@ -23,6 +23,13 @@ def scan_to_cartesian_points(scan_data, angle_min, angle_max) -> list:
         points.append([x, y])
     return points
 
+def polar_to_cartesian_point(distance, angle):
+    # Convert from polar coordinates to cartesian 
+    y = math.sin(angle) * distance
+    x = math.cos(angle) * distance
+
+    return makePoint(x, y)
+
 class LineSegment:
     def __init__(self, slope: float, intercept: float, start_idx: int, end_idx: int):
         self.slope = slope
