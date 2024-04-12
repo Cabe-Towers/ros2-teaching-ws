@@ -29,9 +29,9 @@ class GRFNode(Node):
         self.timer = self.create_timer(1.0, self.find_walls)
 
         # Publishers
-        self.wall_vis_pub = self.create_publisher(Marker, "/wall_vis", 20)
-        self.wall_vis_pub_test = self.create_publisher(Marker, "/wall_vis_test", 20)
-        self.corner_pub = self.create_publisher(Marker, "/arena_corner", 20)
+        self.wall_pub = self.create_publisher(Marker, "/arena/walls", 20)
+        self.wall_segment_pub = self.create_publisher(Marker, "/arena/wall_segments", 20)
+        self.corner_pub = self.create_publisher(Marker, "/arena/corners", 20)
 
         # Subscribers
         self.laser_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
@@ -195,12 +195,12 @@ class GRFNode(Node):
             start_x, start_y = seg.closest_point_on_line(np.array([points[seg.start_idx][0], points[seg.start_idx][1]]))
             end_x, end_y = seg.closest_point_on_line(np.array([points[seg.end_idx - 1][0], points[seg.end_idx - 1][1]]))
 
-            marker_points.append([
-            util.makePoint(start_x, start_y, 0.1), # Start point
-            util.makePoint(end_x, end_y, 0.1), # End point
-            ])
+            marker_points.append(util.makePoint(start_x, start_y, 0.1)) # Start point
+            marker_points.append(util.makePoint(end_x, end_y, 0.1)) # End point
 
         self.visualize_segments(marker_points, rgba=(0.3, 0.3, 0.9, 0.6))
+        util.Rviz.visualize_points(marker_points, Marker.LINE_LIST, self.wall_pub, 
+                                            util.Rviz.LASER_LINK, self.get_clock().now(), 0.05, util.Colors.CYAN, 'walls')
 
         marker_points = []    
         for seg in segments:
@@ -208,65 +208,15 @@ class GRFNode(Node):
             start_x, start_y = seg.closest_point_on_line(np.array([points[seg.start_idx][0], points[seg.start_idx][1]]))
             end_x, end_y = seg.closest_point_on_line(np.array([points[seg.end_idx - 1][0], points[seg.end_idx - 1][1]]))
 
-            marker_points.append([
-            util.makePoint(start_x, start_y, 1.0), # Start point
-            util.makePoint(end_x, end_y, 1.0), # End point
-            ])
+            marker_points.append(util.makePoint(start_x, start_y, 0.2)) # Start point
+            marker_points.append(util.makePoint(end_x, end_y, 0.2)) # End point
         
-        self.visualize_segments(marker_points, rgba=(1.0, 0.0, 0.0, 0.2), scale=0.02, publisher=self.wall_vis_pub_test)
+        util.Rviz.visualize_points(marker_points, Marker.LINE_LIST, self.wall_segment_pub, 
+                                            util.Rviz.LASER_LINK, self.get_clock().now(), 0.05, util.Colors.CYAN, 'wall_segments')
 
-        self.visualise_points(corner_points, (1.0, 0.0, 1.0, 0.8))
-
+        util.Rviz.visualize_points(corner_points, Marker.POINTS, self.corner_pub, 
+                                            util.Rviz.LASER_LINK, self.get_clock().now(), 0.05, util.Colors.CYAN, 'corners')
         ##
-            
-    def visualize_segments(self, segment_points, rgba = (0.0, 1.0, 0.0, 0.5), scale = 0.05, publisher = None):
-        mk = Marker()
-        mk.header.frame_id = '/laser_link'
-        mk.id = 0
-        mk.header.stamp = self.get_clock().now().to_msg()
-        mk.ns = "walls"
-        mk.action = Marker.ADD
-        mk.lifetime = Duration(seconds=1).to_msg()
-
-        mk.type = Marker.LINE_LIST
-        mk.scale.x = scale
-
-        mk.color.r = rgba[0]
-        mk.color.g = rgba[1]
-        mk.color.b = rgba[2]
-        mk.color.a = rgba[3]
-
-        for line in segment_points:
-            mk.points.append(line[0])
-            mk.points.append(line[1])
-        
-        if publisher is None: self.wall_vis_pub.publish(mk)
-        else: publisher.publish(mk)
-
-    def visualise_points(self, points, rgba = (0.0, 1.0, 0.0, 0.5), scale = 0.05, publisher = None):
-        mk = Marker()
-        mk.header.frame_id = '/laser_link'
-        mk.id = 0
-        mk.header.stamp = self.get_clock().now().to_msg()
-        mk.ns = "corners"
-        mk.action = Marker.ADD
-        mk.lifetime = Duration(seconds=1).to_msg()
-
-        mk.type = Marker.SPHERE_LIST
-        mk.scale.x = scale
-        mk.scale.y = scale
-
-        mk.color.r = rgba[0]
-        mk.color.g = rgba[1]
-        mk.color.b = rgba[2]
-        mk.color.a = rgba[3]
-
-        for point in points:
-            mk.points.append(point)
-        
-        if publisher is None: self.corner_pub.publish(mk)
-        else: publisher.publish(mk)
-
 
 def main(args=None):
     rclpy.init(args=args)

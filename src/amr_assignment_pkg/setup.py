@@ -27,7 +27,6 @@ setup(
     entry_points={
         'console_scripts': [
             'assignment_node = amr_assignment_pkg.assignment_node:main',
-            'main_start = amr_assignment_pkg.main_start:main',
             'depth_camera_node = amr_assignment_pkg.depth_camera_node:main',
             'global_reference_frame = amr_assignment_pkg.global_reference_frame:main',
             'simple_node = amr_assignment_pkg.simple_state_machine:main'

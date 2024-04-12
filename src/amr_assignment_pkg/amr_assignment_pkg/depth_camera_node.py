@@ -9,7 +9,6 @@ from sensor_msgs.msg import PointCloud2, Image
 from sensor_msgs_py import point_cloud2
 from cv_bridge import CvBridge, CvBridgeError # Package to convert between ROS and OpenCV Images
 import cv2
-import numpy as np
 import util
 import config
 cfg = config.Config()
@@ -79,13 +78,16 @@ class DepthCameraNode(Node):
                         elif color == 1: # Red
                             red_marker_point = util.makePoint(float(x),float(y),float(z))
 
-                    
-        self.visualise_boxes(red_box_points, rgba=(1.0, 0.0, 0.0, 1.0), publisher=self.red_box_pub)
-        self.visualise_boxes(green_box_points, rgba=(0.0, 1.0, 0.0, 1.0), publisher=self.green_box_pub)
+        util.Rviz.visualize_points(red_box_points, Marker.CUBE_LIST, self.red_box_pub, 
+                                            util.Rviz.DEPTH_LINK, self.get_clock().now(), 0.05, util.Colors.RED, 'red_box')
+        util.Rviz.visualize_points(green_box_points, Marker.CUBE_LIST, self.green_box_pub, 
+                                            util.Rviz.DEPTH_LINK, self.get_clock().now(), 0.05, util.Colors.GREEN, 'green_box')
         if red_marker_point is not None:
-            self.visualise_points([red_marker_point], (1.0, 0.0, 0.0, 1.0), 0.1, self.red_marker_pub)
+            util.Rviz.visualize_points([red_marker_point], Marker.POINTS, self.red_marker_pub, 
+                                                util.Rviz.DEPTH_LINK, self.get_clock().now(), 0.1, util.Colors.RED, 'red_marker')
         if green_marker_point is not None:
-            self.visualise_points([green_marker_point], (0.0, 1.0, 0.0, 1.0), 0.1, self.green_marker_pub)
+            util.Rviz.visualize_points([green_marker_point], Marker.POINTS, self.green_marker_pub, 
+                                 util.Rviz.DEPTH_LINK, self.get_clock().now(), 0.1, util.Colors.GREEN, 'green_marker')
 
     # Image in hsv format image[y][x][0-2]
     # Returns 0 if green, 1 if red, -1 otherwise
@@ -113,61 +115,9 @@ class DepthCameraNode(Node):
         y_cord = self.depth_data[idx][1]
         z_cord = self.depth_data[idx][2]
         return x_cord, y_cord, z_cord
-
-
-
-    def visualise_points(self, points, rgba = (0.0, 1.0, 0.0, 0.5), scale = 0.05, publisher = None):
-        mk = Marker()
-        mk.header.frame_id = '/depth_link'
-        mk.id = 0
-        mk.header.stamp = self.get_clock().now().to_msg()
-        mk.ns = "point"
-        mk.action = Marker.ADD
-        mk.lifetime = Duration(seconds=1).to_msg()
-
-        mk.type = Marker.SPHERE_LIST
-        mk.scale.x = scale
-        mk.scale.y = scale
-
-        mk.color.r = rgba[0]
-        mk.color.g = rgba[1]
-        mk.color.b = rgba[2]
-        mk.color.a = rgba[3]
-
-        for point in points:
-            mk.points.append(point)
-        
-        if publisher is None: self.points_vis_pub.publish(mk)
-        else: publisher.publish(mk)
-
-    def visualise_boxes(self, points, rgba = (0.0, 1.0, 0.0, 0.5), scale = 0.05, publisher = None):
-        mk = Marker()
-        mk.header.frame_id = '/depth_link'
-        mk.id = 0
-        mk.header.stamp = self.get_clock().now().to_msg()
-        mk.ns = "point"
-        mk.action = Marker.ADD
-        mk.lifetime = Duration(seconds=1).to_msg()
-
-        mk.type = Marker.CUBE_LIST
-        mk.scale.x = scale
-        mk.scale.y = scale
-        mk.scale.z = scale
-
-        mk.color.r = rgba[0]
-        mk.color.g = rgba[1]
-        mk.color.b = rgba[2]
-        mk.color.a = rgba[3]
-
-        for point in points:
-            mk.points.append(point)
-        
-        if publisher is not None:
-            publisher.publish(mk)
+    
 
 def main(args=None):
-    print('Starting colour_contours.py.')
-
     rclpy.init(args=args)
     colour_contours = DepthCameraNode()
     rclpy.spin(colour_contours)

@@ -1,6 +1,10 @@
+from rclpy.node import Node
 import math
 import numpy as np
 from geometry_msgs.msg import Point
+from visualization_msgs.msg import Marker
+from rclpy.time import Duration
+from enum import Enum
 
 def makePoint(x, y, z=0.0) -> Point:
     p = Point()
@@ -67,3 +71,72 @@ class LineSegment:
             y_intersect = perp_m * x_intersect + perp_b  # Solve for y-coordinate using the equation of the perpendicular line
 
         return np.array([x_intersect, y_intersect])
+
+
+class Rviz:
+
+    LASER_LINK = '/laser_link'
+    DEPTH_LINK = '/depth_link'
+
+    def visualize_points(points_array, marker_type, publisher, frame_id, time_stamp, scale, rgba, namespace):
+        mk = Marker()
+        mk.header.frame_id = frame_id
+        mk.id = 0
+        mk.header.stamp = time_stamp
+        mk.ns = namespace
+        mk.action = Marker.ADD
+        mk.lifetime = Duration(seconds=1).to_msg()
+
+        mk.type = marker_type
+        if len(scale) > 1:
+            mk.scale.x = scale[0]
+            mk.scale.y = scale[1]
+            mk.scale.z = scale[2]
+        else:
+            mk.scale.x = scale
+            mk.scale.y = scale
+            mk.scale.z = scale
+
+        mk.color.r = rgba[0]
+        mk.color.g = rgba[1]
+        mk.color.b = rgba[2]
+        mk.color.a = rgba[3]
+
+        for point in points_array:
+            mk.points.append(point)
+        
+        publisher.publish(mk)
+
+class Colors(Enum):
+    RED = (1.0, 0.0, 0.0, 1.0)
+    RED_TSP = (1.0, 0.0, 0.0, 0.5)
+
+    ORANGE = (1.0, 0.5, 0.0, 1.0)
+    ORANGE_TSP = (1.0, 0.5, 0.0, 0.5)
+
+    YELLOW = (1.0, 1.0, 0.0, 1.0)
+    YELLOW_TSP = (1.0, 1.0, 0.0, 0.5)
+
+    GREEN = (0.0, 1.0, 0.0, 1.0)
+    GREEN_TSP = (0.0, 1.0, 0.0, 0.5)
+
+    BLUE = (0.0, 0.0, 1.0, 1.0)
+    BLUE_TSP = (0.0, 0.0, 1.0, 0.5)
+
+    INDIGO = (0.6, 0.0, 1.0, 1.0)
+    INDIGO_TSP = (0.6, 0.0, 1.0, 0.5)
+
+    VIOLET = (0.75, 0.0, 1.0, 1.0)
+    VIOLET_TSP = (0.75, 0.0, 1.0, 0.5)
+
+    WHITE = (1.0, 1.0, 1.0, 1.0)
+    WHITE_TSP = (1.0, 1.0, 1.0, 0.5)
+
+    MAGENTA = (1.0, 0.0, 1.0, 1.0)
+    MAGENTA_TSP = (1.0, 0.0, 1.0, 0.5)
+
+    CYAN = (0.0, 1.0, 1.0, 1.0)
+    CYAN_TSP = (0.0, 1.0, 1.0, 0.5)
+
+    PINK = (1.0, 0.75, 0.75, 1.0)
+    PINK_TSP = (1.0, 0.75, 0.75, 0.5)
