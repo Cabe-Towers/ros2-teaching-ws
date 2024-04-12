@@ -83,10 +83,10 @@ class DepthCameraNode(Node):
         util.Rviz.visualize_points(green_box_points, Marker.CUBE_LIST, self.green_box_pub, 
                                             util.Rviz.DEPTH_LINK, self.get_clock().now(), 0.05, util.Colors.GREEN, 'green_box')
         if red_marker_point is not None:
-            util.Rviz.visualize_points([red_marker_point], Marker.POINTS, self.red_marker_pub, 
+            util.Rviz.visualize_points([red_marker_point], Marker.SPHERE_LIST, self.red_marker_pub, 
                                                 util.Rviz.DEPTH_LINK, self.get_clock().now(), 0.1, util.Colors.RED, 'red_marker')
         if green_marker_point is not None:
-            util.Rviz.visualize_points([green_marker_point], Marker.POINTS, self.green_marker_pub, 
+            util.Rviz.visualize_points([green_marker_point], Marker.SPHERE_LIST, self.green_marker_pub, 
                                  util.Rviz.DEPTH_LINK, self.get_clock().now(), 0.1, util.Colors.GREEN, 'green_marker')
 
     # Image in hsv format image[y][x][0-2]

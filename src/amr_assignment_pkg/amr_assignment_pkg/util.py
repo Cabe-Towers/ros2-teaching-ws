@@ -82,13 +82,13 @@ class Rviz:
         mk = Marker()
         mk.header.frame_id = frame_id
         mk.id = 0
-        mk.header.stamp = time_stamp
+        mk.header.stamp = time_stamp.to_msg()
         mk.ns = namespace
         mk.action = Marker.ADD
         mk.lifetime = Duration(seconds=1).to_msg()
 
         mk.type = marker_type
-        if len(scale) > 1:
+        if type(scale) is list:
             mk.scale.x = scale[0]
             mk.scale.y = scale[1]
             mk.scale.z = scale[2]
@@ -97,6 +97,7 @@ class Rviz:
             mk.scale.y = scale
             mk.scale.z = scale
 
+        if type(rgba) is Colors: rgba = rgba.value
         mk.color.r = rgba[0]
         mk.color.g = rgba[1]
         mk.color.b = rgba[2]

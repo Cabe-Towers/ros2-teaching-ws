@@ -198,9 +198,8 @@ class GRFNode(Node):
             marker_points.append(util.makePoint(start_x, start_y, 0.1)) # Start point
             marker_points.append(util.makePoint(end_x, end_y, 0.1)) # End point
 
-        self.visualize_segments(marker_points, rgba=(0.3, 0.3, 0.9, 0.6))
         util.Rviz.visualize_points(marker_points, Marker.LINE_LIST, self.wall_pub, 
-                                            util.Rviz.LASER_LINK, self.get_clock().now(), 0.05, util.Colors.CYAN, 'walls')
+                                            util.Rviz.LASER_LINK, self.get_clock().now(), 0.05, util.Colors.CYAN_TSP, 'walls')
 
         marker_points = []    
         for seg in segments:
@@ -212,10 +211,10 @@ class GRFNode(Node):
             marker_points.append(util.makePoint(end_x, end_y, 0.2)) # End point
         
         util.Rviz.visualize_points(marker_points, Marker.LINE_LIST, self.wall_segment_pub, 
-                                            util.Rviz.LASER_LINK, self.get_clock().now(), 0.05, util.Colors.CYAN, 'wall_segments')
+                                            util.Rviz.LASER_LINK, self.get_clock().now(), 0.05, util.Colors.RED_TSP, 'wall_segments')
 
-        util.Rviz.visualize_points(corner_points, Marker.POINTS, self.corner_pub, 
-                                            util.Rviz.LASER_LINK, self.get_clock().now(), 0.05, util.Colors.CYAN, 'corners')
+        util.Rviz.visualize_points(corner_points, Marker.SPHERE_LIST, self.corner_pub, 
+                                            util.Rviz.LASER_LINK, self.get_clock().now(), 0.05, util.Colors.ORANGE, 'corners')
         ##
 
 def main(args=None):
