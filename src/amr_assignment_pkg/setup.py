@@ -17,7 +17,7 @@ setup(
         ('lib/' + package_name, [package_name + '/config.py']),
         ('lib/' + package_name, [package_name + '/util.py']),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'scipy'],
     zip_safe=True,
     maintainer='Cabe Towers',
     maintainer_email='cabe.towers@gmail.com',
@@ -29,7 +29,8 @@ setup(
             'assignment_node = amr_assignment_pkg.assignment_node:main',
             'main_start = amr_assignment_pkg.main_start:main',
             'depth_camera_node = amr_assignment_pkg.depth_camera_node:main',
-            'global_reference_frame = amr_assignment_pkg.global_reference_frame:main'
+            'global_reference_frame = amr_assignment_pkg.global_reference_frame:main',
+            'simple_node = amr_assignment_pkg.simple_state_machine:main'
         ],
     },
 )
