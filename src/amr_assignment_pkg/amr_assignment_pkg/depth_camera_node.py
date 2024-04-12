@@ -1,12 +1,11 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Duration
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Point
 from visualization_msgs.msg import Marker
 import numpy as np
 
-from sensor_msgs.msg import Image
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud2, Image
 from sensor_msgs_py import point_cloud2
 from cv_bridge import CvBridge, CvBridgeError # Package to convert between ROS and OpenCV Images
 import cv2
@@ -23,8 +22,11 @@ class DepthCameraNode(Node):
         self.create_subscription(PointCloud2, '/limo/depth_camera_link/points', self.depth_callback, 1)
         self.control_sub = self.create_publisher(Twist, '/cmd_vel', 30)
 
-        self.points_vis_pub = self.create_publisher(Marker, '/marker_test', 20)
-        self.box_pub = self.create_publisher(Marker, '/box_locations', 20)
+        # self.points_vis_pub = self.create_publisher(Marker, '/marker_test', 20)
+        self.red_box_pub = self.create_publisher(Marker, '/box_locations/red', 20)
+        self.green_box_pub = self.create_publisher(Marker, '/box_locations/green', 20)
+        self.red_marker_pub = self.create_publisher(Marker, '/arena_marker/red', 20)
+        self.green_marker_pub = self.create_publisher(Marker, '/arena_marker/green', 20)
 
         self.depth_data = None
 
@@ -53,31 +55,56 @@ class DepthCameraNode(Node):
             cv2.RETR_TREE,
             cv2.CHAIN_APPROX_SIMPLE)
         
-        box_points = []
+        red_box_points = []
+        green_box_points = []
+        red_marker_point: Point = None
+        green_marker_point: Point = None
         for c in hsv_contours:
+            
             M = cv2.moments(c)
             if M['m00'] != 0:
                 cx = int(M['m10']/M['m00'])
                 cy = int(M['m01']/M['m00'])
                 if self.depth_data is not None and self.check_camera_exclusion(cx, cy):
                     x,y,z = self.point_from_pointcloud(cx,cy)
-                    if cy > cfg.DEPTH_CAMERA_HEIGHT / 2:
-                        # Marker logic
-                        pass
-                    box_points.append(util.makePoint(float(x),float(y),float(z) + cfg.DEPTH_BOX_Z_ADJUST))
-        
-        # self.get_logger().info(f"Box points: {len(box_points)}")
-        self.visualise_boxes(box_points, rgba=(0.0, 0.2, 1.0, 1.0))
+                    color = self.is_pixel_red_green(cx, cy, hsv_img)
+                    if cy > cfg.DEPTH_CAMERA_HEIGHT / 2: # Box detected
+                        if color == 0: # Green
+                            green_box_points.append(util.makePoint(float(x),float(y),float(z) + cfg.DEPTH_BOX_Z_ADJUST))
+                        elif color == 1: # Red
+                            red_box_points.append(util.makePoint(float(x),float(y),float(z) + cfg.DEPTH_BOX_Z_ADJUST))
+                    else: # Marker detected
+                        if color == 0: # Green
+                            green_marker_point = util.makePoint(float(x),float(y),float(z))
+                        elif color == 1: # Red
+                            red_marker_point = util.makePoint(float(x),float(y),float(z))
+
+                    
+        self.visualise_boxes(red_box_points, rgba=(1.0, 0.0, 0.0, 1.0), publisher=self.red_box_pub)
+        self.visualise_boxes(green_box_points, rgba=(0.0, 1.0, 0.0, 1.0), publisher=self.green_box_pub)
+        if red_marker_point is not None:
+            self.visualise_points([red_marker_point], (1.0, 0.0, 0.0, 1.0), 0.1, self.red_marker_pub)
+        if green_marker_point is not None:
+            self.visualise_points([green_marker_point], (0.0, 1.0, 0.0, 1.0), 0.1, self.green_marker_pub)
+
+    # Image in hsv format image[y][x][0-2]
+    # Returns 0 if green, 1 if red, -1 otherwise
+    def is_pixel_red_green(self, x, y, image):
+        if image[y][x][0] < 10:
+            return 1
+        elif image[y][x][0] > 55 and image[y][x][0] < 105:
+            return 0
+        return -1
 
 
     def depth_callback(self, data: PointCloud2):
-        points = []
+        # points = []
         np_points = point_cloud2.read_points_numpy(data)
         self.depth_data = np_points
 
-        for i in range(0, cfg.DEPTH_CAMERA_WIDTH - 2):
-            x,y,z = self.point_from_pointcloud(i, 180)
-            points.append(util.makePoint(float(x),float(y),float(z)))
+        # for i in range(0, cfg.DEPTH_CAMERA_WIDTH - 2):
+        #     x,y,z = self.point_from_pointcloud(i, 180)
+        #     points.append(util.makePoint(float(x),float(y),float(z)))
         # self.visualise_points(points)
 
     def point_from_pointcloud(self, x, y):
@@ -135,8 +162,8 @@ class DepthCameraNode(Node):
         for point in points:
             mk.points.append(point)
         
-        if publisher is None: self.box_pub.publish(mk)
-        else: publisher.publish(mk)
+        if publisher is not None:
+            publisher.publish(mk)
 
 def main(args=None):
     print('Starting colour_contours.py.')

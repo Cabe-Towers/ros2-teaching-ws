@@ -186,7 +186,7 @@ class GRFNode(Node):
                             exist_flag = True
                             break
                     if not exist_flag:
-                        corner_points.append(util.makePoint(x, y))
+                        corner_points.append(util.makePoint(x, y, 0.5))
     
         ## Visualize walls in rviz
         marker_points = []
@@ -196,11 +196,11 @@ class GRFNode(Node):
             end_x, end_y = seg.closest_point_on_line(np.array([points[seg.end_idx - 1][0], points[seg.end_idx - 1][1]]))
 
             marker_points.append([
-            util.makePoint(start_x, start_y), # Start point
-            util.makePoint(end_x, end_y), # End point
+            util.makePoint(start_x, start_y, 0.1), # Start point
+            util.makePoint(end_x, end_y, 0.1), # End point
             ])
 
-        self.visualize_segments(marker_points)
+        self.visualize_segments(marker_points, rgba=(0.3, 0.3, 0.9, 0.6))
 
         marker_points = []    
         for seg in segments:
@@ -213,9 +213,9 @@ class GRFNode(Node):
             util.makePoint(end_x, end_y, 1.0), # End point
             ])
         
-        self.visualize_segments(marker_points, rgba=(1.0, 0.0, 0.0, 0.5), scale=0.02, publisher=self.wall_vis_pub_test)
+        self.visualize_segments(marker_points, rgba=(1.0, 0.0, 0.0, 0.2), scale=0.02, publisher=self.wall_vis_pub_test)
 
-        self.visualise_points(corner_points, (1.0, 0.0, 0.0, 0.5))
+        self.visualise_points(corner_points, (1.0, 0.0, 1.0, 0.8))
 
         ##
             
