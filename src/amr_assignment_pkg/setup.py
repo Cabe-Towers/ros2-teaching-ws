@@ -29,6 +29,7 @@ setup(
             'state_node = amr_assignment_pkg.state_node:main',
             'depth_camera_node = amr_assignment_pkg.depth_camera_node:main',
             'global_reference_frame = amr_assignment_pkg.global_reference_frame:main',
+            'nav_node = amr_assignment_pkg.nav_node:main',
             'simple_node = amr_assignment_pkg.simple_state_machine:main'
         ],
     },

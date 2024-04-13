@@ -18,7 +18,6 @@ from nav_msgs.msg import Odometry
 # Srv
 from example_interfaces.srv import Trigger
 # Tf
-import tf2_ros
 from tf2_ros import TransformBroadcaster, TransformListener
 from tf2_ros.buffer import Buffer
 

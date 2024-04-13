@@ -16,4 +16,8 @@ def generate_launch_description():
             package='amr_assignment_pkg',
             executable='state_node',
             name='state_node'),
+        launch_ros.actions.Node(
+            package='amr_assignment_pkg',
+            executable='nav_node',
+            name='nav_node'),
   ])
