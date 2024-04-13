@@ -1,23 +1,34 @@
 import rclpy
+import rclpy.duration
 from rclpy.node import Node
 from rclpy.time import Duration
 import numpy as np
 import math
-import util
-from util import LineSegment
-import warnings
-from config import get_config
 from typing import List
-cfg = get_config()
 
-CONST_90_DEG_RADIANS = math.radians(90)
-
+import warnings
 warnings.simplefilter('ignore', np.RankWarning)
 
 # Msg
+import rclpy.time
 from sensor_msgs.msg import LaserScan
 from visualization_msgs.msg import Marker
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, TransformStamped
+from nav_msgs.msg import Odometry
+# Srv
+from example_interfaces.srv import Trigger
+# Tf
+import tf2_ros
+from tf2_ros import TransformBroadcaster, TransformListener
+from tf2_ros.buffer import Buffer
+
+# Util
+import util
+from util import LineSegment
+from config import get_config
+cfg = get_config()
+
+CONST_90_DEG_RADIANS = math.radians(90)
 
 class GRFNode(Node):
     def __init__(self):
@@ -26,7 +37,8 @@ class GRFNode(Node):
         self.points = None
         self.dist_ahead = None
 
-        self.timer = self.create_timer(1.0, self.find_walls)
+        self.timer = self.create_timer(0.2, self.find_walls)
+        self.x_add = 0.0
 
         # Publishers
         self.wall_pub = self.create_publisher(Marker, "/arena/walls", 20)
@@ -35,6 +47,64 @@ class GRFNode(Node):
 
         # Subscribers
         self.laser_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
+        self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 1)
+        # self.clock_sub = self.create_subscription()
+
+        # Services
+        self.grf_init_srv = self.create_service(Trigger, 'init_grf', self.init_grf)
+
+        # TF
+        self.create_timer(0.03, self.publish_transform)
+        self.tf_buffer = Buffer(cache_time=rclpy.duration.Duration(seconds=1.0))
+        self.tf_broadcaster = TransformBroadcaster(self)
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        # self.odom_data = None
+
+    def init_grf(self, req: Trigger.Request, resp: Trigger.Response):
+        resp.message = "Hello from grf node!"
+        resp.success = True
+        return resp
+    
+    def publish_transform(self):
+        t = TransformStamped()
+
+        try:
+            odom: TransformStamped = self.tf_buffer.lookup_transform('base_link', 'odom', rclpy.time.Time())
+            odom_data = odom.transform
+        except:
+            self.get_logger().info("Could not get transform from odom to base_link")
+            return
+        
+        if odom_data is None: return
+        t_odom = odom_data
+
+        # if self.odom_data is None: return
+        # t_odom = self.odom_data
+        # t.transform.rotation.x = 0.0
+        # t.transform.rotation.y = 0.0
+        # t.transform.rotation.z = t_odom.orientation.z
+        # t.transform.rotation.w = t_odom.orientation.w * -1
+        # t.transform.translation.x = -t_odom.position.x
+        # t.transform.translation.y = t_odom.position.y
+        # t.transform.translation.z = -t_odom.position.z
+
+        t.transform.rotation.x = 0.0
+        t.transform.rotation.y = 0.0
+        t.transform.rotation.z = t_odom.rotation.z * -1
+        t.transform.rotation.w = t_odom.rotation.w * -1
+
+        t.transform.translation.x = t_odom.translation.x
+        t.transform.translation.y = t_odom.translation.y
+        t.transform.translation.z = t_odom.translation.z
+
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'base_link'
+        t.child_frame_id = 'arena'
+
+        self.tf_broadcaster.sendTransform(t)
+    
+    def odom_callback(self, data: Odometry):
+        self.odom_data = data.pose.pose
 
     def scan_callback(self, data: LaserScan):
         if data is not None:

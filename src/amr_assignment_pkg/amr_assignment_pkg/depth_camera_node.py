@@ -24,8 +24,8 @@ class DepthCameraNode(Node):
         # self.points_vis_pub = self.create_publisher(Marker, '/marker_test', 20)
         self.red_box_pub = self.create_publisher(Marker, '/box_locations/red', 20)
         self.green_box_pub = self.create_publisher(Marker, '/box_locations/green', 20)
-        self.red_marker_pub = self.create_publisher(Marker, '/arena_marker/red', 20)
-        self.green_marker_pub = self.create_publisher(Marker, '/arena_marker/green', 20)
+        self.red_marker_pub = self.create_publisher(Marker, '/arena/red_marker', 20)
+        self.green_marker_pub = self.create_publisher(Marker, '/arena/green_marker', 20)
 
         self.depth_data = None
 

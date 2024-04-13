@@ -26,7 +26,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'assignment_node = amr_assignment_pkg.assignment_node:main',
+            'state_node = amr_assignment_pkg.state_node:main',
             'depth_camera_node = amr_assignment_pkg.depth_camera_node:main',
             'global_reference_frame = amr_assignment_pkg.global_reference_frame:main',
             'simple_node = amr_assignment_pkg.simple_state_machine:main'
