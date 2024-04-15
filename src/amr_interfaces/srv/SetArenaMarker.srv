@@ -1,0 +1,7 @@
+bool red_marker_visible
+geometry_msgs/Point red_marker_point
+bool green_marker_visible
+geometry_msgs/Point green_marker_point
+string frame_id
+---
+bool success

@@ -5,6 +5,8 @@ from geometry_msgs.msg import Twist, Point
 from visualization_msgs.msg import Marker
 import numpy as np
 
+from amr_interfaces.srv import GetArenaMarker, GetBoxLocations
+
 from sensor_msgs.msg import PointCloud2, Image
 from sensor_msgs_py import point_cloud2
 from cv_bridge import CvBridge, CvBridgeError # Package to convert between ROS and OpenCV Images
@@ -16,20 +18,53 @@ cfg = config.Config()
 class DepthCameraNode(Node):
     def __init__(self):
         super().__init__('depth_camera')
+
+        self.green_marker_point = None
+        self.red_marker_point = None
+        self.green_box_points = []
+        self.red_box_points = []
+
+        # Subscriptions
         self.create_subscription(Image, '/limo/depth_camera_link/image_raw', self.camera_callback, 1)
         # self.create_subscription(Image, '/limo/depth_camera_link/depth/image_raw', self.depth_callback, 1)
         self.create_subscription(PointCloud2, '/limo/depth_camera_link/points', self.depth_callback, 1)
         self.control_sub = self.create_publisher(Twist, '/cmd_vel', 30)
 
+        # Publishers
         # self.points_vis_pub = self.create_publisher(Marker, '/marker_test', 20)
         self.red_box_pub = self.create_publisher(Marker, '/box_locations/red', 20)
         self.green_box_pub = self.create_publisher(Marker, '/box_locations/green', 20)
         self.red_marker_pub = self.create_publisher(Marker, '/arena/red_marker', 20)
         self.green_marker_pub = self.create_publisher(Marker, '/arena/green_marker', 20)
+        
+        # Services
+        self.get_marker_srv = self.create_service(GetArenaMarker, '/depth/get_markers', self.get_marker_srv_cb)
+        self.get_boxes_srv = self.create_service(GetBoxLocations, '/depth/get_box_locations', self.get_box_locations_cb)
 
         self.depth_data = None
 
         self.br = CvBridge()
+
+    # Provides the location of visible markers in the depth_link frame
+    def get_marker_srv_cb(self, req, resp: GetArenaMarker.Response):
+        if self.green_marker_point is not None:
+            resp.green_marker_visible = True
+            resp.green_marker_point = self.green_marker_point
+        else: resp.green_marker_visible = False
+
+        if self.red_marker_point is not None:
+            resp.red_marker_visible = True
+            resp.red_marker_point = self.red_marker_point
+        else: resp.red_marker_visible = False
+
+        resp.frame_id = 'depth_link'
+        return resp
+    
+    def get_box_locations_cb(self, req, resp: GetBoxLocations.Response):
+        resp.green_boxes = self.green_box_points
+        resp.red_boxes = self.red_box_points
+        resp.frame_id = 'depth_link'
+        return resp
 
     def check_camera_exclusion(self, x, y):
         return (x < cfg.DEPTH_CAMERA_WIDTH - cfg.CAMERA_EXCLUDE_EDGES_X
@@ -49,7 +84,7 @@ class DepthCameraNode(Node):
                                  np.array((0, 20, 20)),
                                  np.array((255, 255, 255)))
 
-        hsv_contours, hierachy = cv2.findContours(
+        hsv_contours, _ = cv2.findContours(
             hsv_thresh.copy(),
             cv2.RETR_TREE,
             cv2.CHAIN_APPROX_SIMPLE)
@@ -78,6 +113,13 @@ class DepthCameraNode(Node):
                         elif color == 1: # Red
                             red_marker_point = util.makePoint(float(x),float(y),float(z))
 
+        self.green_marker_point = green_marker_point
+        self.red_marker_point = red_marker_point
+
+        self.green_box_points = green_box_points
+        self.red_box_points = red_box_points
+
+        # Rviz
         util.Rviz.visualize_points(red_box_points, Marker.CUBE_LIST, self.red_box_pub, 
                                             util.Rviz.DEPTH_LINK, self.get_clock().now(), 0.05, util.Colors.RED, 'red_box')
         util.Rviz.visualize_points(green_box_points, Marker.CUBE_LIST, self.green_box_pub, 

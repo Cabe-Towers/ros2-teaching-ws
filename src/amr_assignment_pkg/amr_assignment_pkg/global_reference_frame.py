@@ -17,6 +17,7 @@ from geometry_msgs.msg import Point, TransformStamped
 from nav_msgs.msg import Odometry
 # Srv
 from example_interfaces.srv import Trigger
+from amr_interfaces.srv import SetArenaMarker
 # Tf
 from tf2_ros import TransformBroadcaster, TransformListener
 from tf2_ros.buffer import Buffer
@@ -33,11 +34,11 @@ class GRFNode(Node):
     def __init__(self):
         super().__init__('GRF_node')
 
-        self.points = None
-        self.dist_ahead = None
+        self.points = None # List of lidar points as [[x,y], ...] in laser_link frame
+        self.green_marker_point: Point = None # Green marker point in arena frame
+        self.red_marker_point: Point = None # Red marker point in arena frame
 
         self.timer = self.create_timer(0.2, self.find_walls)
-        self.x_add = 0.0
 
         # Publishers
         self.wall_pub = self.create_publisher(Marker, "/arena/walls", 20)
@@ -50,23 +51,43 @@ class GRFNode(Node):
         # self.clock_sub = self.create_subscription()
 
         # Services
-        self.grf_init_srv = self.create_service(Trigger, 'init_grf', self.init_grf)
+        self.grf_init_srv = self.create_service(Trigger, '/arena/init_frame', self.init_grf_cb)
+        self.set_arena_markers_srv = self.create_service(SetArenaMarker, '/arena/set_markers', self.set_arena_markers_cb)
+        
 
         # TF
         self.create_timer(0.03, self.publish_transform)
-        self.tf_buffer = Buffer(cache_time=rclpy.duration.Duration(seconds=1.0))
+        self.tf_buffer = Buffer()
         self.tf_broadcaster = TransformBroadcaster(self)
         self.tf_listener = TransformListener(self.tf_buffer, self)
         # self.odom_data = None
 
-    def init_grf(self, req: Trigger.Request, resp: Trigger.Response):
+    def init_grf_cb(self, req: Trigger.Request, resp: Trigger.Response):
         resp.message = "Hello from grf node!"
+        resp.success = True
+        return resp
+    
+    # Returns marker points (green, red) in the arena frame
+    def get_marker_pos(self):
+        return (self.green_marker_point, self.red_marker_point)
+
+    # Set position of visible markers in arena frame
+    def set_arena_markers_cb(self, req: SetArenaMarker.Request, resp: SetArenaMarker.Response):
+        if not self.tf_buffer.can_transform('arena', req.frame_id, rclpy.time.Time(), Duration(seconds=0.5)):
+            self.get_logger().info(f"Unable to set arena marker points. Cannot get transform from '{req.frame_id}' to 'arena'")
+            resp.success = False
+            return resp
+
+        if req.green_marker_visible: 
+            self.green_marker_point = self.tf_buffer.transform_full(req.green_marker_point, 'arena', rclpy.time.Time(), req.frame_id)
+        if req.red_marker_visible: 
+            self.red_marker_point = self.tf_buffer.transform_full(req.red_marker_point, 'arena', rclpy.time.Time(), req.frame_id)
+        
         resp.success = True
         return resp
     
     def publish_transform(self):
         t = TransformStamped()
-
         try:
             odom: TransformStamped = self.tf_buffer.lookup_transform('base_link', 'odom', rclpy.time.Time())
             odom_data = odom.transform
@@ -107,7 +128,6 @@ class GRFNode(Node):
 
     def scan_callback(self, data: LaserScan):
         if data is not None:
-            self.dist_ahead = data.ranges[len(data.ranges)//2]
             self.points = util.scan_to_cartesian_points(data.ranges, cfg.LIDAR_MIN_ANGLE, cfg.LIDAR_MAX_ANGLE)
 
     def fit_line(self, points, remove_outliers=True):

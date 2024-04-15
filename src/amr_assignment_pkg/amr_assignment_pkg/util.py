@@ -77,6 +77,7 @@ class Rviz:
 
     LASER_LINK = '/laser_link'
     DEPTH_LINK = '/depth_link'
+    ARENA = '/arena'
 
     def visualize_points(points_array, marker_type, publisher, frame_id, time_stamp, scale, rgba, namespace):
         mk = Marker()

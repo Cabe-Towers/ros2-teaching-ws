@@ -16,8 +16,9 @@ setup(
         # Allows config and util files to be imported by code
         ('lib/' + package_name, [package_name + '/config.py']),
         ('lib/' + package_name, [package_name + '/util.py']),
+        ('lib/' + package_name, [package_name + '/pathfinding.py']),
     ],
-    install_requires=['setuptools', 'scipy'],
+    install_requires=['setuptools', 'scipy', 'simple-pid'],
     zip_safe=True,
     maintainer='Cabe Towers',
     maintainer_email='cabe.towers@gmail.com',
