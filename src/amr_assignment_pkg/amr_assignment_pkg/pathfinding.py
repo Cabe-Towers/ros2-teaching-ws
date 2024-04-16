@@ -48,20 +48,20 @@ def cell_details_to_waypoint_list(cell_details, dest):
         cell_details[row][col].parent_i == row
         and cell_details[row][col].parent_j == col
     ):
-        waypoints.append((row, col))
+        # waypoints.append((row, col))
         temp_row = cell_details[row][col].parent_i
         temp_col = cell_details[row][col].parent_j
 
         # If robot needs to make a turn, add a waypoint here
-        # offset = (row - temp_row, col - temp_col)
-        # if offset != current_offset:
-        #     current_offset = offset
-        #     waypoints.append((row, col))
+        offset = (row - temp_row, col - temp_col)
+        if offset != current_offset:
+            current_offset = offset
+            waypoints.append((row, col))
 
         row = temp_row
         col = temp_col
 
-    waypoints.append((row, col))
+    # waypoints.append((row, col))
 
     waypoints.reverse()
     return waypoints
@@ -71,22 +71,22 @@ def cell_details_to_waypoint_list(cell_details, dest):
 def a_star_search(grid, src, dest, node):
     ROW = len(grid)
     COL = len(grid[0])
-    node.get_logger().info(f"Size of grid: rows-{ROW} cols-{COL} valid = {(src[0] >= 0) and (src[0] < ROW) and (src[1] >= 0) and (src[1] < COL)}")
+    # node.get_logger().info(f"Size of grid: rows-{ROW} cols-{COL} valid = {(src[0] >= 0) and (src[0] < ROW) and (src[1] >= 0) and (src[1] < COL)}")
     # Check if the source and destination are valid
     if not is_valid(src[0], src[1], ROW, COL) or not is_valid(dest[0], dest[1], ROW, COL):
-        node.get_logger().info("Source or destination is invalid")
+        node.get_logger().error("A*: Source or destination is invalid")
         return []
 
     # Check if the source and destination are unblocked
     if not is_unblocked(grid, src[0], src[1]) or not is_unblocked(
         grid, dest[0], dest[1]
     ):
-        node.get_logger().info("Source or the destination is blocked")
+        node.get_logger().error("A*: Source or the destination is blocked")
         return []
 
     # Check if we are already at the destination
     if is_destination(src[0], src[1], dest):
-        node.get_logger().info("We are already at the destination")
+        node.get_logger().warn("A*: Attempted to pathfind while already at destination")
         return []
 
     # Initialize the closed list (visited cells)

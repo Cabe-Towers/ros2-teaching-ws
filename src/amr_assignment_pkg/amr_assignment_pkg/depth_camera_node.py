@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Duration
+from builtin_interfaces.msg import Time as TimeMsg
 from geometry_msgs.msg import Twist, Point
 from visualization_msgs.msg import Marker
 import numpy as np
@@ -23,6 +24,7 @@ class DepthCameraNode(Node):
         self.red_marker_point = None
         self.green_box_points = []
         self.red_box_points = []
+        self.observation_timestamp = TimeMsg()
 
         # Subscriptions
         self.create_subscription(Image, '/limo/depth_camera_link/image_raw', self.camera_callback, 1)
@@ -64,6 +66,7 @@ class DepthCameraNode(Node):
         resp.green_boxes = self.green_box_points
         resp.red_boxes = self.red_box_points
         resp.frame_id = 'depth_link'
+        resp.stamp = self.observation_timestamp
         return resp
 
     def check_camera_exclusion(self, x, y):
@@ -89,6 +92,7 @@ class DepthCameraNode(Node):
             cv2.RETR_TREE,
             cv2.CHAIN_APPROX_SIMPLE)
         
+        timestamp = self.get_clock().now().to_msg()
         red_box_points = []
         green_box_points = []
         red_marker_point: Point = None
@@ -118,6 +122,7 @@ class DepthCameraNode(Node):
 
         self.green_box_points = green_box_points
         self.red_box_points = red_box_points
+        self.observation_timestamp = timestamp
 
         # Rviz
         util.Rviz.visualize_points(red_box_points, Marker.CUBE_LIST, self.red_box_pub, 

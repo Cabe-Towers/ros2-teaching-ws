@@ -20,6 +20,7 @@ from example_interfaces.srv import Trigger
 from amr_interfaces.srv import SetArenaMarker
 # Tf
 from tf2_ros import TransformBroadcaster, TransformListener
+from tf2_geometry_msgs import PointStamped as tfPointStamped
 from tf2_ros.buffer import Buffer
 
 # Util
@@ -56,7 +57,7 @@ class GRFNode(Node):
         
 
         # TF
-        self.create_timer(0.03, self.publish_transform)
+        self.create_timer(0.01, self.publish_transform)
         self.tf_buffer = Buffer()
         self.tf_broadcaster = TransformBroadcaster(self)
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -78,10 +79,18 @@ class GRFNode(Node):
             resp.success = False
             return resp
 
-        if req.green_marker_visible: 
-            self.green_marker_point = self.tf_buffer.transform_full(req.green_marker_point, 'arena', rclpy.time.Time(), req.frame_id)
-        if req.red_marker_visible: 
-            self.red_marker_point = self.tf_buffer.transform_full(req.red_marker_point, 'arena', rclpy.time.Time(), req.frame_id)
+        if req.green_marker_visible:
+            gm_stamped = tfPointStamped()
+            gm_stamped.point = req.green_marker_point
+            gm_stamped.header.frame_id = req.frame_id
+            gm_stamped.header.stamp = self.get_clock().now().to_msg()
+            self.green_marker_point = self.tf_buffer.transform_full(gm_stamped, 'arena', rclpy.time.Time(), req.frame_id)
+        if req.red_marker_visible:
+            rm_stamped = tfPointStamped()
+            rm_stamped.point = req.red_marker_point
+            rm_stamped.header.frame_id = req.frame_id
+            rm_stamped.header.stamp = self.get_clock().now().to_msg()
+            self.red_marker_point = self.tf_buffer.transform_full(rm_stamped, 'arena', rclpy.time.Time(), req.frame_id)
         
         resp.success = True
         return resp

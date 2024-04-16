@@ -19,6 +19,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetArenaMarker.srv"
   "srv/GetBoxLocations.srv"
   "srv/Int16.srv"
+  "action/NavHeading.action"
+  "action/NavLocation.action"
   DEPENDENCIES geometry_msgs # Add packages that above messages depend on, in this case geometry_msgs for Sphere.msg
 )
 
