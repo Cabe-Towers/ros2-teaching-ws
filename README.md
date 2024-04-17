@@ -20,7 +20,7 @@ source install/setup.bash
 ```
 
 ### Running the assignment
-Run the following commands in order to start the simulation environment and launch the assignment.
+Run the following commands in a new terminal to start the simulation environment and launch the assignment.
 #### Launch simulation environment 
 ```
 ros2 launch uol_tidybot tidybot.launch.py world:=level_2_2.world
@@ -29,6 +29,12 @@ ros2 launch uol_tidybot tidybot.launch.py world:=level_2_2.world
 Once open, please load the config file located in `/workspaces/ros2-teaching-ws/src`
 ```
 rviz2
+```
+#### Add cubes to the environment
+After adding cubes spread them around evenly across the arena
+```
+ros2 run  uol_tidybot generate_objects --ros-args -p red:=false -p n_objects:=4
+ros2 run  uol_tidybot generate_objects --ros-args -p red:=true -p n_objects:=4
 ```
 #### Launch assignment code
 ```
