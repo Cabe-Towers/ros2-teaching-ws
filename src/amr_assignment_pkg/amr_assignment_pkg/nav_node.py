@@ -22,8 +22,9 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid as OccupancyGridMsg
 from nav_msgs.msg import MapMetaData
 
-from amr_interfaces.srv import GetBoxLocations, Int16
-from amr_interfaces.action import NavHeading, NavLocation
+from example_interfaces.srv import Trigger
+from amr_interfaces.srv import GetBoxLocations, LineOfSight
+from amr_interfaces.action import NavHeading, NavLocation, SearchBoxes
 
 # Tf
 from tf2_ros import TransformListener
@@ -32,19 +33,22 @@ from tf2_geometry_msgs import PointStamped
 
 class OccupancyCell():
     occupied = False
+    inflate_occupied = False
     data_source = None
 
 
 class OccupancyGrid():
-    def __init__(self, grid_size, cell_size, inflate_size=2):
+    def __init__(self, grid_size, cell_size, inflate_radius=2):
         self.grid_size = grid_size
         self.cell_size = cell_size
-        self.inflate_size = inflate_size
+        self.inflate_size = inflate_radius
         self.discard_once = False
 
         self.cell_x_count = int(self.grid_size // self.cell_size + 1) # Add one for some extra padding
         self.cell_y_count = int(self.grid_size // self.cell_size + 1) # Add one for some extra padding
         self.cells = []
+
+        self.inflate_offsets = self.generate_inflate_offsets(self.inflate_size)
 
         self.init_cells()
     
@@ -58,22 +62,12 @@ class OccupancyGrid():
     # A* search path from src to dest cells (row, col)
     def path_find(self, src, dest, node):
         # Construct grid to use for path finding
-        inflate_offsets = self.generate_inflate_offsets(self.inflate_size)
+        # inflate_offsets = self.generate_inflate_offsets(self.inflate_size)
         grid = []
-        for row_idx, row in enumerate(self.cells):
+        for row in self.cells:
             grid_row = []
-            for col_idx, cell in enumerate(row):
-                if cell.occupied:
-                    grid_row.append(True)
-                else:
-                    inflate_occupied = False
-                    for offset in inflate_offsets:
-                        if not self.check_row_col_valid(row_idx + offset[0], col_idx + offset[1]): continue
-                        # node.get_logger().info(f"RowCol: {row_idx + offset[0]}, {col_idx + offset[1]} XY count {self.cell_x_count}, {self.cell_y_count}")
-                        if self.cells[row_idx + offset[0]][col_idx + offset[1]].occupied:
-                            inflate_occupied = True
-                            break
-                    grid_row.append(inflate_occupied)
+            for cell in row:
+                grid_row.append(cell.occupied or cell.inflate_occupied)
             grid.append(grid_row)
 
         waypoints = a_star_search(grid, src, dest, node)
@@ -85,20 +79,41 @@ class OccupancyGrid():
             waypoint_points.append(util.makePoint(x, y))
         return waypoint_points
     
+    def line_of_sight(self, src: Point, dest: Point, ignore_data_source=None, path_width=2):
+        src_row_col = self.get_cell_idx_from_xy(src.x, src.y)
+        dest_row_col = self.get_cell_idx_from_xy(dest.x, dest.y)
+        
+        for row in range(src_row_col[0], dest_row_col[0]):
+            for col in range(src_row_col[1] - path_width, src_row_col[1] + path_width + 1):
+                if self.cells[row][col].occupied and self.cells[row][col].data_source != ignore_data_source:
+                    return False
+        return True
+    
     def generate_inflate_offsets(self, inflate_amount):
         offsets = []
-        for row in range(-inflate_amount, inflate_amount + 1):
-            for col in range(-inflate_amount, inflate_amount + 1):
-                if row == 0 and col == 0: continue
-                offsets.append([row, col])
+        for x_offset in range(-inflate_amount, inflate_amount + 1):
+            for y_offset in range(-inflate_amount, inflate_amount + 1):
+                if (x_offset**2 + y_offset**2) <= inflate_amount:
+                    offsets.append([x_offset, y_offset])
         return offsets
-
+    
+    def recalculate_inflate_radius(self):
+        for row in self.cells:
+            for cell in row:
+                cell.inflate_occupied = False
+        
+        for row_id, row in enumerate(self.cells):
+            for col_id, cell in enumerate(row):
+                self.add_inflate_for_cell(row_id, col_id)
     
     def clear_cells(self):
         for row in self.cells:
             for cell in row:
                 cell.occupied = False
-    
+                cell.inflate_occupied = False
+                cell.data_source = None
+                
+
     def discard_old_data(self):
         self.discard_once = True
 
@@ -124,16 +139,24 @@ class OccupancyGrid():
             return False
         return self.cells[idx[0]][idx[1]].occupied
     
-    def add_points(self, points):
+    def add_inflate_for_cell(self, row, col):
+        for offset in self.inflate_offsets:
+            if self.check_row_col_valid(row + offset[0], col + offset[1]):
+                self.cells[row + offset[0]][col + offset[1]].inflate_occupied = True
+    
+    def add_points(self, points, data_source='object'):
         if self.discard_once: 
             self.discard_once = False
             self.clear_cells()
         for point in points:
             idx = self.get_cell_idx_from_xy(point.x, point.y)
             if not idx: continue
-            self.cells[idx[0]][idx[1]].occupied = True
+            if self.cells[idx[0]][idx[1]].occupied == False:
+                self.add_inflate_for_cell(idx[0], idx[1])
+                self.cells[idx[0]][idx[1]].occupied = True
+                self.cells[idx[0]][idx[1]].data_source = data_source
 
-    def add_points_with_transform(self, points, tf_buffer: Buffer, frame_id, target_frame_id, stamp):
+    def add_points_with_transform(self, points, tf_buffer: Buffer, frame_id, target_frame_id, stamp, data_source):
         tf_points = []
         for point in points:
             point_stamped = PointStamped()
@@ -142,7 +165,8 @@ class OccupancyGrid():
             tf_point = tf_buffer.transform_full(point_stamped, target_frame_id, stamp, frame_id)
             tf_points.append(tf_point.point)
         
-        self.add_points(tf_points)
+        self.add_points(tf_points, data_source)
+        return tf_points
     
     def publish_occupancy_grid(self, publisher, frame_id, stamp, node):
         msg = OccupancyGridMsg()
@@ -171,21 +195,25 @@ class OccupancyGrid():
         for col_id in range(0, self.cell_y_count):
             for row_id in range(0, self.cell_x_count):
                 if self.cells[row_id][col_id].occupied:
-                    data.append(100)
+                    if self.cells[row_id][col_id].data_source == 'object':
+                        data.append(100)
+                    else:
+                        data.append(50)
+                elif self.cells[row_id][col_id].inflate_occupied:
+                    data.append(20)
                 else: data.append(0)
 
         msg.data = data
-
         publisher.publish(msg)
         
 
 class NavNode(Node):
     def __init__(self):
         super().__init__('nav_node')
-        self.occupancy_grid = OccupancyGrid(3.2, 0.05, 3)
+        self.occupancy_grid = OccupancyGrid(3.2, 0.05, 7)
 
         self.heading_pid = PID(2.8, 0, 0, setpoint=0, output_limits=(-cfg.MAX_ANGULAR_VELOCITY, cfg.MAX_ANGULAR_VELOCITY))
-        self.linear_pid = PID(2.8, 0, 0, setpoint=0, output_limits=(-cfg.MAX_LINEAR_VELOCITY, cfg.MAX_LINEAR_VELOCITY))
+        self.linear_pid = PID(2.8, 0.1, 0, setpoint=0, output_limits=(-cfg.MAX_LINEAR_VELOCITY, cfg.MAX_LINEAR_VELOCITY))
 
         self.heading_set = False
         self.next_waypoint: Point = False
@@ -197,10 +225,16 @@ class NavNode(Node):
         self.waypoint_hit = False
         self.follow_waypoint = False
         self.allow_rgbd_data = False
+        self.allow_rgbd_from = rclpy.time.Time().to_msg()
+        self.new_box_data = False
 
         # Data
         self.last_scan_points = None
         self.last_scan_stamp = None
+
+        self.search_boxes_red = []
+        self.search_boxes_green = []
+
         self.scan_future = None
 
         # Timers
@@ -220,9 +254,13 @@ class NavNode(Node):
         # Actions
         self.set_heading_action = ActionServer(self, NavHeading, '/nav/set_heading', self.set_heading_action_handler)
         self.set_goal_action = ActionServer(self, NavLocation, '/nav/set_goal_location', self.set_goal_location_action_handler)
+        self.set_manual_waypoint_action = ActionServer(self, NavLocation, '/nav/set_waypoint', self.set_manual_waypoint_action_handler)
+        self.scan_boxes_action = ActionServer(self, SearchBoxes, '/nav/scan_boxes', self.scan_boxes_action_handler)
+        self.reverse_turn_action = ActionServer(self, NavLocation, '/nav/reverse_turn', self.reverse_and_turn_action_callback)
 
         # Services
-        # self.set_heading_srv = self.create_service(Int16, '/nav/set_heading', self.set_heading_srv_cb)
+        self.check_LOS_srv = self.create_service(LineOfSight, '/nav/check_line_of_sight', self.check_line_of_sight_srv_cb)
+        self.clear_occupancy_grid_srv = self.create_service(Trigger, '/nav/clear_occupancy_grid', self.clear_occupancy_grid_srv_cb)
 
         # Clients
         self.depth_cb_group = ReentrantCallbackGroup()
@@ -240,27 +278,33 @@ class NavNode(Node):
             return
         
         x,y = self.get_robot_position()
+        if self.occupancy_grid.get_cell_idx_from_xy(x, y) == self.occupancy_grid.get_cell_idx_from_xy(self.goal_point.x, self.goal_point.y):
+            return
+        
         points = self.occupancy_grid.path_find(self.occupancy_grid.get_cell_idx_from_xy(x, y), 
                                                self.occupancy_grid.get_cell_idx_from_xy(self.goal_point.x, self.goal_point.y), self)
         if not points:
-            self.occupancy_grid.discard_old_data()
+            # self.occupancy_grid.discard_old_data()
             self.get_logger().info("No path")
             self.no_path_flag = True
             self.goal_point = False
+            self.next_waypoint = False
             return
         if self.waypoint_hit and len(points) > 1:
             self.waypoint_hit = False
             points.pop(0)
         self.next_waypoint = points[0]
 
+        points.insert(0, util.makePoint(x, y))
         util.Rviz.visualize_points(points, Marker.LINE_STRIP, self.waypoint_pub, util.Rviz.ARENA, self.get_clock().now(), 0.05, util.Colors.MAGENTA, 'waypoints')
 
     def run_navigate(self):
-        # self.get_logger().info("Nav")
+        # self.get_logger().info(f"Nav {self.heading_set}")
         msg = Twist()
         if self.follow_waypoint and self.next_waypoint != False: # Follow waypoint
             distance_err, heading_err = self.get_heading_and_dist_toward_point(self.next_waypoint)
         elif self.heading_set != False: # Turn to set heading
+            # self.get_logger().info("Not false")
             distance_err = 0
             heading_err = self.heading_set - self.get_robot_heading()
         else: # Do nothing
@@ -285,14 +329,96 @@ class NavNode(Node):
             linear_vel = 0
 
         # self.get_logger().info(f"Heading err: {math.degrees(heading_err)} Distance err: {distance_err} Lv: {linear_vel} Av {angular_vel} Acc: {self.heading_accept}")
+        # self.get_logger().info(f"Heading err: {math.degrees(heading_err)} Acc: {self.heading_accept}, set {self.heading_set} cur_head{self.get_robot_heading()}")
         if abs(angular_vel) < 0.05 and linear_vel < 0.1:
-            self.allow_rgbd_data = True
+            if self.allow_rgbd_data == False: 
+                self.allow_rgbd_from = self.get_clock().now().to_msg()
+                self.allow_rgbd_data = True
         else: 
             self.allow_rgbd_data = False
 
         msg.angular.z = float(angular_vel)
         msg.linear.x = float(-linear_vel)
         self.control_pub.publish(msg)
+
+    def reverse_and_turn_action_callback(self, goal_handle):
+        self.get_logger().info("Reverse turn action")
+        self.reverse_and_turn(goal_handle.request.destination)
+        goal_handle.succeed()
+        return NavLocation.Result()
+
+    def reverse_and_turn(self, dest: Point):
+        self.get_logger().info("Reverse turn")
+        self.follow_waypoint = False
+        self.next_waypoint = False
+        self.heading_set = False
+
+        msg = Twist()
+        msg.linear.x = -0.2
+        self.control_pub.publish(msg)
+        self.get_logger().info("Pub rev")
+        self.get_clock().sleep_for(Duration(seconds=0.5)) # Allow time to reverse
+        self.get_logger().info("After, setting wp")
+
+        self.next_waypoint = False
+        self.follow_waypoint = True
+        self.set_manual_waypoint(dest)
+        return
+
+    def check_line_of_sight_srv_cb(self, req: LineOfSight.Request, resp: LineOfSight.Response):
+        self.get_logger().info("Checking line of sight srv")
+        resp.clear = self.check_line_of_sight(req.start, req.end, req.ignore_data_source)
+        return resp
+
+    def check_line_of_sight(self, start: Point, end: Point, ignore_data_source=None):
+        self.get_logger().info("Checking line of sight...")
+        return self.occupancy_grid.line_of_sight(start, end, ignore_data_source)
+    
+    def clear_occupancy_grid_srv_cb(self, req, resp):
+        self.occupancy_grid.clear_cells()
+        return resp
+
+    def scan_boxes_action_handler(self, goal_handler):
+        self.scan_for_boxes()
+        result = SearchBoxes.Result()
+        result.green_boxes = self.search_boxes_green
+        result.red_boxes = self.search_boxes_red
+        self.get_logger().info(f"Boxes: {len(self.search_boxes_green)} {len(self.search_boxes_red)}")
+        goal_handler.succeed()
+        return result
+
+    def scan_for_boxes(self):
+        self.get_logger().info("Scanning for boxes...")
+        self.search_boxes_green = []
+        self.search_boxes_red = []
+        for i in range(0, 360, 45):
+            self.get_logger().info(f"Moving to heading {i} degrees")
+            self.set_heading(math.radians(i))
+            self.new_box_data = False
+            while not self.new_box_data:
+                self.get_clock().sleep_for(Duration(seconds=0.1))
+        
+        # Remove duplicate boxes
+        g_remove_boxes = []
+        for gbox1 in self.search_boxes_green:
+            for gbox2 in self.search_boxes_green:
+                if gbox1 == gbox2 or gbox1 in g_remove_boxes or gbox2 in g_remove_boxes: continue
+                if math.sqrt((gbox2.x - gbox1.x) ** 2 + (gbox2.y - gbox1.y)**2) < 0.06:
+                    self.search_boxes_green.remove(gbox2)
+        for box in g_remove_boxes:
+            self.search_boxes_green.remove(box)
+
+        r_remove_boxes = []
+        for rbox1 in self.search_boxes_red:
+            for rbox2 in self.search_boxes_red:
+                if rbox1 == rbox2 or rbox1 in r_remove_boxes or rbox2 in r_remove_boxes: continue
+                if math.sqrt((rbox2.x - rbox1.x) ** 2 + (rbox2.y - rbox1.y)**2) < 0.06:
+                    self.search_boxes_red.remove(rbox2)
+        for box in r_remove_boxes:
+            self.search_boxes_red.remove(box)
+
+        self.get_logger().info("Scanning for boxes done")
+        return
 
     def set_heading_action_handler(self, goal_handle):
         self.get_logger().info(f"Setting heading to {math.degrees(self.heading_set)}")
@@ -302,7 +428,8 @@ class NavNode(Node):
 
         goal_handle.succeed()
         if not goal_handle.request.hold_after_complete:
-            self.heading_set = False
+            # self.heading_set = False
+            pass
         return NavHeading.Result()
     
     def set_heading(self, heading):
@@ -311,19 +438,36 @@ class NavNode(Node):
         self.follow_waypoint = False
         self.no_path_flag = False
         self.goal_point = False
+        if heading == 0.0: heading = 0.001
         self.heading_set = heading
+
+    def set_manual_waypoint_action_handler(self, goal_handle):
+        self.get_logger().info("Setting waypoint")
+        self.set_manual_waypoint(goal_handle.request.destination)
+
+        goal_handle.succeed()
+        return NavLocation.Result()
+    
+    def set_manual_waypoint(self, dest: Point):
+        self.goal_point = False
+        self.next_waypoint = dest
+        distance_err = cfg.WAYPOINT_ACCEPT_RADIUS + 1
+        while not distance_err < cfg.WAYPOINT_ACCEPT_RADIUS:
+            self.get_clock().sleep_for(Duration(seconds=0.5))
+            distance_err, _ = self.get_heading_and_dist_toward_point(self.next_waypoint)
     
     def set_goal_location_action_handler(self, goal_handle):
         self.get_logger().info("Setting goal")
-        self.set_goal_point(goal_handle.request.destination) ## Add checking for self.next_waypoint being false here
+        self.set_goal_point(goal_handle.request.destination)
         distance_err = cfg.WAYPOINT_ACCEPT_RADIUS + 1
-        while not distance_err < cfg.WAYPOINT_ACCEPT_RADIUS and not self.no_path_flag:
+        while not distance_err < cfg.WAYPOINT_ACCEPT_RADIUS + 0.03 and not self.no_path_flag:
             self.get_clock().sleep_for(Duration(seconds=0.5))
-            if self.next_waypoint != False:
-                distance_err, _ = self.get_heading_and_dist_toward_point(self.next_waypoint)
+            distance_err, _ = self.get_heading_and_dist_toward_point(self.goal_point)
+
+        self.get_logger().info(f"Goal finished")
         
         if self.no_path_flag:
-            goal_handle.cancel()
+            goal_handle.abort()
         else:
             goal_handle.succeed()
         
@@ -336,6 +480,7 @@ class NavNode(Node):
         self.heading_set = False
         self.heading_accept = False
         self.waypoint_hit = False
+        self.no_path_flag = False
     
     def get_heading_and_dist_toward_point(self, p: Point):
         # Heading
@@ -385,15 +530,22 @@ class NavNode(Node):
     def occupancy_grid_publish(self):
         if self.allow_rgbd_data:
             req = GetBoxLocations.Request()
-            self.depth_future = self.get_box_locations_client.call_async(req)
-            while not self.depth_future.done(): # Multi-threading goodness
+            self.box_future = self.get_box_locations_client.call_async(req)
+            while not self.box_future.done(): # Multi-threading goodness
                 self.get_clock().sleep_for(Duration(seconds=0.01))
-            resp: GetBoxLocations.Response = self.depth_future.result()
-            try:
-                self.occupancy_grid.add_points_with_transform(resp.red_boxes, self.tf_buffer, resp.frame_id, 'arena', resp.stamp)
-                self.occupancy_grid.add_points_with_transform(resp.green_boxes, self.tf_buffer, resp.frame_id, 'arena', resp.stamp)
-            except Exception as e:
-                self.get_logger().info(f"Could not transform box data to arena frame: {e}")
+            resp: GetBoxLocations.Response = self.box_future.result()
+
+            # Convert timestamps to milliseconds to compare
+            allow_from = self.allow_rgbd_from.sec * 1000 + self.allow_rgbd_from.nanosec / 1e6
+            image_ts = resp.stamp.sec * 1000 + resp.stamp.nanosec / 1e6
+            depth_ts = resp.depth_stamp.sec * 1000 + resp.depth_stamp.nanosec / 1e6
+            if image_ts > allow_from and depth_ts > allow_from:
+                try:
+                    self.search_boxes_red += self.occupancy_grid.add_points_with_transform(resp.red_boxes, self.tf_buffer, resp.frame_id, 'arena', resp.stamp, 'red_boxes')
+                    self.search_boxes_green += self.occupancy_grid.add_points_with_transform(resp.green_boxes, self.tf_buffer, resp.frame_id, 'arena', resp.stamp, 'green_boxes')
+                    self.new_box_data = True
+                except Exception as e:
+                    self.get_logger().info(f"Could not transform box data to arena frame: {e}")
 
         self.occupancy_grid.publish_occupancy_grid(self.occupancy_map_pub, 'arena', self.get_clock().now().to_msg(), self)
         return
@@ -403,35 +555,21 @@ class NavNode(Node):
         self.last_scan_stamp = data.header.stamp
         self.scan_future = self.tf_buffer.wait_for_transform_async('arena', data.header.frame_id, data.header.stamp)
         self.scan_future.add_done_callback(self.add_scan_points_cb)
-        # xy_points = util.scan_to_cartesian_points(data.ranges, cfg.LIDAR_MIN_ANGLE, cfg.LIDAR_MAX_ANGLE)
-        # points = []
-        # try:
-        #     for point in xy_points: # This is dumb
-        #         point_stamped = PointStamped()
-        #         point_stamped.point = util.makePoint(point[0], point[1]) # X and Y are reversed, probably bad transform
-        #         point_stamped.header.frame_id = data.header.frame_id
-        #         future = self.tf_buffer.wait_for_transform_async('arena', data.header.frame_id, data.header.stamp)
-        #         while not future.ad:
-        #             continue
-        #         tf_point = self.tf_buffer.transform_full(point_stamped, 'arena', data.header.stamp, data.header.frame_id)
-
-        #         points.append(tf_point.point)
-                
-        # except Exception as e:
-        #     self.get_logger().info(f"Could not transform scan data to arena frame type: {e}")
-        #     return
         
     def add_scan_points_cb(self, future):
         stamp = self.last_scan_stamp
         xy_points = util.scan_to_cartesian_points(self.last_scan_points, cfg.LIDAR_MIN_ANGLE, cfg.LIDAR_MAX_ANGLE)
         points = []
-        for point in xy_points: # This is dumb
-                point_stamped = PointStamped()
-                point_stamped.point = util.makePoint(point[0], point[1])
-                point_stamped.header.frame_id = 'laser_link'
-                tf_point = self.tf_buffer.transform_full(point_stamped, 'arena', stamp, 'laser_link')
-                points.append(tf_point.point)
-        self.occupancy_grid.add_points(points)
+        try:
+            for point in xy_points: # This is dumb
+                    point_stamped = PointStamped()
+                    point_stamped.point = util.makePoint(point[0], point[1])
+                    point_stamped.header.frame_id = 'laser_link'
+                    tf_point = self.tf_buffer.transform_full(point_stamped, 'arena', stamp, 'laser_link')
+                    points.append(tf_point.point)
+            self.occupancy_grid.add_points(points)
+        except Exception as e:
+                    self.get_logger().info(f"Error in scan points callback, could not add points to occupancy grid: {e}")
 
 
 def main(args=None):

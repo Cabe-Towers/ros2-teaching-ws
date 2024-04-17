@@ -26,9 +26,14 @@ class Config:
     MAX_ANGULAR_VELOCITY = 0.6
     MAX_LINEAR_VELOCITY = 0.3
 
-    WAYPOINT_ACCEPT_RADIUS = 0.1
+    WAYPOINT_ACCEPT_RADIUS = 0.05
     HEADING_MAX_ERROR = math.radians(25)
     HEADING_PROCEED_ANGLE_ACCEPT = math.radians(2)
+
+    BOX_NAVIGATION_OFFSET = 0.3
+
+    PUSH_TO_X_VALUE = 1.22
+    BOX_PUSHED_X_VALUE = 1.1
 
 def get_config() -> Config:
     cfg = Config()

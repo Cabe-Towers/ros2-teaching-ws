@@ -24,7 +24,10 @@ class DepthCameraNode(Node):
         self.red_marker_point = None
         self.green_box_points = []
         self.red_box_points = []
-        self.observation_timestamp = TimeMsg()
+        self.depth_data = None
+        self.image_observation_timestamp = TimeMsg()
+        self.depth_observation_timestamp = TimeMsg()
+        self.last_depth_stamp = TimeMsg()
 
         # Subscriptions
         self.create_subscription(Image, '/limo/depth_camera_link/image_raw', self.camera_callback, 1)
@@ -42,8 +45,6 @@ class DepthCameraNode(Node):
         # Services
         self.get_marker_srv = self.create_service(GetArenaMarker, '/depth/get_markers', self.get_marker_srv_cb)
         self.get_boxes_srv = self.create_service(GetBoxLocations, '/depth/get_box_locations', self.get_box_locations_cb)
-
-        self.depth_data = None
 
         self.br = CvBridge()
 
@@ -66,7 +67,8 @@ class DepthCameraNode(Node):
         resp.green_boxes = self.green_box_points
         resp.red_boxes = self.red_box_points
         resp.frame_id = 'depth_link'
-        resp.stamp = self.observation_timestamp
+        resp.stamp = self.image_observation_timestamp
+        resp.depth_stamp = self.depth_observation_timestamp
         return resp
 
     def check_camera_exclusion(self, x, y):
@@ -122,7 +124,8 @@ class DepthCameraNode(Node):
 
         self.green_box_points = green_box_points
         self.red_box_points = red_box_points
-        self.observation_timestamp = timestamp
+        self.image_observation_timestamp = timestamp
+        self.depth_observation_timestamp = self.last_depth_stamp
 
         # Rviz
         util.Rviz.visualize_points(red_box_points, Marker.CUBE_LIST, self.red_box_pub, 
@@ -150,6 +153,7 @@ class DepthCameraNode(Node):
         # points = []
         np_points = point_cloud2.read_points_numpy(data)
         self.depth_data = np_points
+        self.last_depth_stamp = data.header.stamp
 
         # for i in range(0, cfg.DEPTH_CAMERA_WIDTH - 2):
         #     x,y,z = self.point_from_pointcloud(i, 180)

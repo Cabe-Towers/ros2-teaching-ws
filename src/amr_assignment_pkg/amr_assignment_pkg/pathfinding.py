@@ -1,6 +1,9 @@
 import math
 import heapq
 
+ROW_SIZE = None
+COL_SIZE = None
+
 # A* search algorithm by GeeksForGeeks
 # Available at https://www.geeksforgeeks.org/a-search-algorithm/
 
@@ -30,8 +33,14 @@ def is_destination(row, col, dest):
 
 
 # Calculate the heuristic value of a cell (Euclidean distance to destination)
-def calculate_h_value(row, col, dest):
-    return ((row - dest[0]) ** 2 + (col - dest[1]) ** 2) ** 0.5
+def calculate_h_value(row, col, dest, grid):
+    offsets = range(-3, 4)
+    penalty = 0
+    for x_offset in offsets:
+        for y_offset in offsets:
+            if not is_valid(row + x_offset, col + y_offset, ROW_SIZE, COL_SIZE): continue
+            if grid[row + x_offset][col + y_offset] == True: penalty += 30 - (min(abs(x_offset), abs(y_offset)) * 2)
+    return ((row - dest[0]) ** 2 + (col - dest[1]) ** 2) ** 0.5 + penalty
 
 
 def cell_details_to_waypoint_list(cell_details, dest):
@@ -71,10 +80,13 @@ def cell_details_to_waypoint_list(cell_details, dest):
 def a_star_search(grid, src, dest, node):
     ROW = len(grid)
     COL = len(grid[0])
+    global ROW_SIZE, COL_SIZE
+    ROW_SIZE = ROW
+    COL_SIZE = COL
     # node.get_logger().info(f"Size of grid: rows-{ROW} cols-{COL} valid = {(src[0] >= 0) and (src[0] < ROW) and (src[1] >= 0) and (src[1] < COL)}")
     # Check if the source and destination are valid
     if not is_valid(src[0], src[1], ROW, COL) or not is_valid(dest[0], dest[1], ROW, COL):
-        node.get_logger().error("A*: Source or destination is invalid")
+        node.get_logger().error(f"A*: Source or destination is invalid Sv {is_valid(src[0], src[1], ROW, COL)} Dv {is_valid(dest[0], dest[1], ROW, COL)}")
         return []
 
     # Check if the source and destination are unblocked
@@ -82,7 +94,28 @@ def a_star_search(grid, src, dest, node):
         grid, dest[0], dest[1]
     ):
         node.get_logger().error("A*: Source or the destination is blocked")
-        return []
+        if not is_unblocked(grid, src[0], src[1]):
+            node.get_logger().info("A*: Source blocked, attempting to ignore...")
+
+            valid_offset = False
+            for offset_distance in range(1, 6):
+                for x_offset in range(-offset_distance, offset_distance + 1):
+                    for y_offset in range(-offset_distance, offset_distance + 1):
+                        if (x_offset**2 + y_offset**2) <= offset_distance:
+                            if is_unblocked(grid, src[0] + x_offset, src[1] + y_offset):
+                                valid_offset = (x_offset, y_offset)
+                                break
+                    if valid_offset != False: break
+                if valid_offset != False: break
+            
+            if valid_offset != False:
+                node.get_logger().info(f"A*: Found valid offset {valid_offset}")
+                src = (src[0] + valid_offset[0], src[1] + valid_offset[1])
+            else:
+                node.get_logger().info("A*: Could not find valid offset")
+                return []
+        else:
+            return []
 
     # Check if we are already at the destination
     if is_destination(src[0], src[1], dest):
@@ -148,7 +181,7 @@ def a_star_search(grid, src, dest, node):
                 else:
                     # Calculate the new f, g, and h values
                     g_new = cell_details[i][j].g + 1.0
-                    h_new = calculate_h_value(new_i, new_j, dest)
+                    h_new = calculate_h_value(new_i, new_j, dest, grid)
                     f_new = g_new + h_new
 
                     # If the cell is not in the open list or the new f value is smaller

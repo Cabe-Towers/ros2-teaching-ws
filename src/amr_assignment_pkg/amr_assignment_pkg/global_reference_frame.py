@@ -194,7 +194,6 @@ class GRFNode(Node):
                     swapped = not swapped
                 
                 # Recalculate line of best fit
-                # self.get_logger().info(f"Len x_1: {len(x_1)}")
                 slope, intercept = np.polyfit(x_1, y_1, 1)
 
         if swapped:
@@ -206,6 +205,10 @@ class GRFNode(Node):
     def find_walls(self):
         if self.points is None: return
         points = self.points
+        # for point in points:
+        #     if abs(point[0]) == float('inf') or abs(point[1]) == float('inf'):
+        #         self.get_logger().error(f"self.points contains an infinite value")
+        #         exit()
 
         # Remove points if they are too close together, helps remove noise from lidar scan
         tmp_points = []

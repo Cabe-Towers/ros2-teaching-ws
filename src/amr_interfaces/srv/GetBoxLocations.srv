@@ -3,3 +3,4 @@ geometry_msgs/Point[] green_boxes
 geometry_msgs/Point[] red_boxes
 string frame_id
 builtin_interfaces/Time stamp
+builtin_interfaces/Time depth_stamp
