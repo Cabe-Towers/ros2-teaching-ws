@@ -38,11 +38,12 @@ class OccupancyCell():
 
 
 class OccupancyGrid():
-    def __init__(self, grid_size, cell_size, inflate_radius=2):
+    def __init__(self, grid_size, cell_size, inflate_radius=2, node=None):
         self.grid_size = grid_size
         self.cell_size = cell_size
         self.inflate_size = inflate_radius
         self.discard_once = False
+        self.node = node
 
         self.cell_x_count = int(self.grid_size // self.cell_size + 1) # Add one for some extra padding
         self.cell_y_count = int(self.grid_size // self.cell_size + 1) # Add one for some extra padding
@@ -82,10 +83,19 @@ class OccupancyGrid():
     def line_of_sight(self, src: Point, dest: Point, ignore_data_source=None, path_width=2):
         src_row_col = self.get_cell_idx_from_xy(src.x, src.y)
         dest_row_col = self.get_cell_idx_from_xy(dest.x, dest.y)
+        self.node.get_logger().info(f"Src, dest {src_row_col}, {dest_row_col}")
+        assert(src_row_col != False)
+        assert(dest_row_col != False)
+
+        if src_row_col[0] > dest_row_col[0]: # Swap src and dest so range works
+            tmp = src_row_col
+            src_row_col = dest_row_col
+            dest_row_col = tmp
         
         for row in range(src_row_col[0], dest_row_col[0]):
             for col in range(src_row_col[1] - path_width, src_row_col[1] + path_width + 1):
                 if self.cells[row][col].occupied and self.cells[row][col].data_source != ignore_data_source:
+                    self.node.get_logger().info(f"Blocked!")
                     return False
         return True
     
@@ -210,7 +220,7 @@ class OccupancyGrid():
 class NavNode(Node):
     def __init__(self):
         super().__init__('nav_node')
-        self.occupancy_grid = OccupancyGrid(3.2, 0.05, 7)
+        self.occupancy_grid = OccupancyGrid(3.2, 0.05, 7, node=self)
 
         self.heading_pid = PID(2.8, 0, 0, setpoint=0, output_limits=(-cfg.MAX_ANGULAR_VELOCITY, cfg.MAX_ANGULAR_VELOCITY))
         self.linear_pid = PID(2.8, 0, 0, setpoint=0, output_limits=(-cfg.MAX_LINEAR_VELOCITY, cfg.MAX_LINEAR_VELOCITY))

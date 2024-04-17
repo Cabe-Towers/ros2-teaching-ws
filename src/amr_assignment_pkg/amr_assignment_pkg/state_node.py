@@ -160,7 +160,6 @@ class StateMachine(Node):
         for box in self.red_boxes:
             if box.x < -cfg.BOX_PUSHED_X_VALUE: continue
 
-            
             if self.line_of_sight_req(box, 'red_boxes') == False: continue
             if self.send_navigation_goal(util.makePoint(box.x + cfg.BOX_NAVIGATION_OFFSET, box.y)):
                 self.get_logger().info(f"Successfully navigated to box")
@@ -194,8 +193,11 @@ class StateMachine(Node):
 
     def line_of_sight_req(self, box, ignore_data_source):
         req = LineOfSight.Request()
-        req.start = util.makePoint(box.x + cfg.BOX_NAVIGATION_OFFSET, box.y)
-        req.end = util.makePoint(-cfg.PUSH_TO_X_VALUE, box.y)
+        if (ignore_data_source) == 'green_boxes': color_mult = 1
+        else: color_mult = -1
+        req.start = util.makePoint(box.x + cfg.BOX_NAVIGATION_OFFSET * -color_mult, box.y)
+        req.end = util.makePoint(cfg.PUSH_TO_X_VALUE * color_mult, box.y)
+        self.get_logger().info(f"Start, end {req.start} {req.end}")
         req.ignore_data_source = ignore_data_source
         self.future = self.check_line_of_sight_client.call_async(req)
         rclpy.spin_until_future_complete(self, self.future)
