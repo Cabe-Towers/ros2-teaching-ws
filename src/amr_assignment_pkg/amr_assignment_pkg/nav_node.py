@@ -163,9 +163,6 @@ class OccupancyGrid():
     
     # Adds points to the occupancy grid
     def add_points(self, points, data_source='object'):
-        if self.discard_once: 
-            self.discard_once = False
-            self.clear_cells()
         for point in points:
             idx = self.get_cell_idx_from_xy(point.x, point.y)
             if not idx: continue
