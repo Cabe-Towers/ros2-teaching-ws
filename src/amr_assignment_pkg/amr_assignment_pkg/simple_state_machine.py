@@ -1,3 +1,7 @@
+##
+## Basic solution for level 1
+## This file is an early version of the project and is not used in the final solution
+##
 from enum import Enum
 import rclpy
 from rclpy.node import Node
@@ -6,7 +10,6 @@ import cv2
 import numpy as np
 from scipy.spatial.transform import Rotation
 import math
-
 
 # Msg
 from visualization_msgs.msg import Marker

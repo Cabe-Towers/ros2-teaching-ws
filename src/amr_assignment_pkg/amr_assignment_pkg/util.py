@@ -6,6 +6,7 @@ from visualization_msgs.msg import Marker
 from rclpy.time import Duration
 from enum import Enum
 
+# Util function to construct a Point
 def makePoint(x, y, z=0.0) -> Point:
     p = Point()
     p.x = x
@@ -13,6 +14,7 @@ def makePoint(x, y, z=0.0) -> Point:
     p.z = z
     return p
 
+# Converts polar coordinates from lidar to x and y coordinates in the laser_link frame
 def scan_to_cartesian_points(scan_data, angle_min, angle_max) -> list:
     total_angle = abs(angle_min) + angle_max
 
@@ -35,6 +37,7 @@ def polar_to_cartesian_point(distance, angle):
 
     return makePoint(x, y)
 
+# Line segment for fitting to arena walls
 class LineSegment:
     def __init__(self, slope: float, intercept: float, start_idx: int, end_idx: int):
         self.slope = slope
@@ -75,11 +78,12 @@ class LineSegment:
 
 
 class Rviz:
-
+    # Reference frames
     LASER_LINK = '/laser_link'
     DEPTH_LINK = '/depth_link'
     ARENA = '/arena'
 
+    # Show a marker object in rviz
     def visualize_points(points_array, marker_type, publisher, frame_id, time_stamp, scale, rgba, namespace):
         mk = Marker()
         mk.header.frame_id = frame_id
@@ -110,6 +114,7 @@ class Rviz:
         
         publisher.publish(mk)
 
+# List of colors for easy use
 class Colors(Enum):
     RED = (1.0, 0.0, 0.0, 1.0)
     RED_TSP = (1.0, 0.0, 0.0, 0.5)

@@ -1,19 +1,11 @@
+# rclpy
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
 from rclpy.time import Duration
 from rclpy.action import ActionServer
-import numpy as np
-import math
-from scipy.spatial.transform import Rotation
-from simple_pid import PID
-
 import rclpy.time
-import util
-from pathfinding import a_star_search
-import config
-cfg = config.Config()
 
 # Message types
 from geometry_msgs.msg import Twist, Point, Pose, Transform
@@ -22,6 +14,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid as OccupancyGridMsg
 from nav_msgs.msg import MapMetaData
 
+# Interfaces
 from example_interfaces.srv import Trigger
 from amr_interfaces.srv import GetBoxLocations, LineOfSight
 from amr_interfaces.action import NavHeading, NavLocation, SearchBoxes
@@ -30,6 +23,18 @@ from amr_interfaces.action import NavHeading, NavLocation, SearchBoxes
 from tf2_ros import TransformListener
 from tf2_ros.buffer import Buffer
 from tf2_geometry_msgs import PointStamped
+
+# Math
+import math
+from scipy.spatial.transform import Rotation
+from simple_pid import PID
+
+# Util and config
+import util
+from pathfinding import a_star_search
+import config
+cfg = config.Config()
+
 
 class OccupancyCell():
     occupied = False
@@ -41,9 +46,8 @@ class OccupancyGrid():
     def __init__(self, grid_size, cell_size, inflate_radius=2, node=None):
         self.grid_size = grid_size
         self.cell_size = cell_size
-        self.inflate_size = inflate_radius
-        self.discard_once = False
-        self.node = node
+        self.inflate_size = inflate_radius # Radius to inflate edges of occupied cells for pathing
+        self.node = node # Used for debug logging
 
         self.cell_x_count = int(self.grid_size // self.cell_size + 1) # Add one for some extra padding
         self.cell_y_count = int(self.grid_size // self.cell_size + 1) # Add one for some extra padding
@@ -53,6 +57,7 @@ class OccupancyGrid():
 
         self.init_cells()
     
+    # Fills grid array with cell objects
     def init_cells(self):
         for x_idx in range(0, self.cell_x_count):
             row = []
@@ -63,7 +68,6 @@ class OccupancyGrid():
     # A* search path from src to dest cells (row, col)
     def path_find(self, src, dest, node):
         # Construct grid to use for path finding
-        # inflate_offsets = self.generate_inflate_offsets(self.inflate_size)
         grid = []
         for row in self.cells:
             grid_row = []
@@ -71,16 +75,18 @@ class OccupancyGrid():
                 grid_row.append(cell.occupied or cell.inflate_occupied)
             grid.append(grid_row)
 
+        # Get waypoints from a*
         waypoints = a_star_search(grid, src, dest, node)
-        # node.get_logger().info(f"Len waypoints is {len(waypoints)}")
         if waypoints == []: return False
         waypoint_points = []
+        # Convert grid row column waypoints to x and y in the arena frame
         for row_col in waypoints:
             x, y = self.get_xy_from_cell_idx(row_col[0], row_col[1])
             waypoint_points.append(util.makePoint(x, y))
         return waypoint_points
     
-    def line_of_sight(self, src: Point, dest: Point, ignore_data_source=None, path_width=2):
+    # Checks the space between 2 points in the x axis are free from obstacles
+    def check_line_of_sight(self, src: Point, dest: Point, ignore_data_source=None, path_width=2):
         src_row_col = self.get_cell_idx_from_xy(src.x, src.y)
         dest_row_col = self.get_cell_idx_from_xy(dest.x, dest.y)
         self.node.get_logger().info(f"Src, dest {src_row_col}, {dest_row_col}")
@@ -95,10 +101,11 @@ class OccupancyGrid():
         for row in range(src_row_col[0], dest_row_col[0]):
             for col in range(src_row_col[1] - path_width, src_row_col[1] + path_width + 1):
                 if self.cells[row][col].occupied and self.cells[row][col].data_source != ignore_data_source:
-                    self.node.get_logger().info(f"Blocked!")
+                    # self.node.get_logger().info(f"Blocked!")
                     return False
         return True
     
+    # Generates offsets for occupied cells to mark other cells as inflated
     def generate_inflate_offsets(self, inflate_amount):
         offsets = []
         for x_offset in range(-inflate_amount, inflate_amount + 1):
@@ -122,14 +129,12 @@ class OccupancyGrid():
                 cell.occupied = False
                 cell.inflate_occupied = False
                 cell.data_source = None
-                
 
-    def discard_old_data(self):
-        self.discard_once = True
-
+    # Checks a row and col value are within the grid and valid
     def check_row_col_valid(self, row, col):
         return (row >= 0) and (row < self.cell_x_count) and (col >= 0) and (col < self.cell_y_count)
 
+    # Converts x and y coordinates in the arena frame to row and column indexes
     def get_cell_idx_from_xy(self, x, y):
         row_idx = int(x / self.cell_size + self.cell_x_count / 2)
         col_idx = int(y / self.cell_size + self.cell_y_count / 2)
@@ -138,6 +143,7 @@ class OccupancyGrid():
             return (row_idx, col_idx)
         return False
     
+    # Converts row and column indexes to x,y coordinates
     def get_xy_from_cell_idx(self, row, col):
         x = self.cell_size * (row - self.cell_x_count / 2)
         y = self.cell_size * (col - self.cell_y_count / 2)
@@ -149,11 +155,13 @@ class OccupancyGrid():
             return False
         return self.cells[idx[0]][idx[1]].occupied
     
+    # Adds a flag to cells surrounding an occupied cell to show it's inflated radius for pathing
     def add_inflate_for_cell(self, row, col):
         for offset in self.inflate_offsets:
             if self.check_row_col_valid(row + offset[0], col + offset[1]):
                 self.cells[row + offset[0]][col + offset[1]].inflate_occupied = True
     
+    # Adds points to the occupancy grid
     def add_points(self, points, data_source='object'):
         if self.discard_once: 
             self.discard_once = False
@@ -166,6 +174,7 @@ class OccupancyGrid():
                 self.cells[idx[0]][idx[1]].occupied = True
                 self.cells[idx[0]][idx[1]].data_source = data_source
 
+    # Adds and transforms points, returns an array of transformed points
     def add_points_with_transform(self, points, tf_buffer: Buffer, frame_id, target_frame_id, stamp, data_source):
         tf_points = []
         for point in points:
@@ -178,6 +187,7 @@ class OccupancyGrid():
         self.add_points(tf_points, data_source)
         return tf_points
     
+    # Publishes map in Rviz
     def publish_occupancy_grid(self, publisher, frame_id, stamp, node):
         msg = OccupancyGridMsg()
         msg.header.frame_id = frame_id
@@ -230,22 +240,23 @@ class NavNode(Node):
         self.goal_point: Point = False
 
         # State
-        self.no_path_flag = False
-        self.heading_accept = False
-        self.waypoint_hit = False
-        self.follow_waypoint = False
-        self.allow_rgbd_data = False
-        self.allow_rgbd_from = rclpy.time.Time().to_msg()
-        self.new_box_data = False
+        self.no_path_flag = False # Indicates when no path is available
+        self.heading_accept = False # Indicates if the robot should continue moving forward if it goes off course
+        self.waypoint_hit = False # Flag to show when a waypoint is reached
+        self.follow_waypoint = False # When true, navigation will path to the goal point
+        self.allow_rgbd_data = False # Flag to only allow rgbd data when the robot is not moving
+        self.allow_rgbd_from = rclpy.time.Time().to_msg() # Timestamp to only accept new rgbd data
+        self.new_box_data = False # Flag set when new data from rgbd camera is ready to be added to the occupancy grid
 
         # Data
-        self.last_scan_points = None
+        self.last_scan_points = None # Used with lidar callback to store lidar points
         self.last_scan_stamp = None
+        self.scan_future = None # Async future for scan callback
 
+        # List of boxes found
         self.search_boxes_red = []
         self.search_boxes_green = []
 
-        self.scan_future = None
 
         # Timers
         self.occupancy_grid_cb_group = ReentrantCallbackGroup()
@@ -282,8 +293,8 @@ class NavNode(Node):
 
         while not self.get_box_locations_client.wait_for_service(timeout_sec=1): self.get_logger().info("Waiting for depth box service")
 
+    # Generates waypoints from the current location to the goal path, run on timer
     def generate_waypoints(self):
-        # self.get_logger().info("Gen wps")
         if self.goal_point == False:
             return
         
@@ -294,7 +305,6 @@ class NavNode(Node):
         points = self.occupancy_grid.path_find(self.occupancy_grid.get_cell_idx_from_xy(x, y), 
                                                self.occupancy_grid.get_cell_idx_from_xy(self.goal_point.x, self.goal_point.y), self)
         if not points:
-            # self.occupancy_grid.discard_old_data()
             self.get_logger().info("No path")
             self.no_path_flag = True
             self.goal_point = False
@@ -308,19 +318,19 @@ class NavNode(Node):
         points.insert(0, util.makePoint(x, y))
         util.Rviz.visualize_points(points, Marker.LINE_STRIP, self.waypoint_pub, util.Rviz.ARENA, self.get_clock().now(), 0.05, util.Colors.MAGENTA, 'waypoints')
 
+    # Follows waypoints or turns robot to heading. Adjusts for error in position
     def run_navigate(self):
-        # self.get_logger().info(f"Nav {self.heading_set}")
         msg = Twist()
         if self.follow_waypoint and self.next_waypoint != False: # Follow waypoint
             distance_err, heading_err = self.get_heading_and_dist_toward_point(self.next_waypoint)
         elif self.heading_set != False: # Turn to set heading
-            # self.get_logger().info("Not false")
             distance_err = 0
             heading_err = self.heading_set - self.get_robot_heading()
         else: # Do nothing
             distance_err = 0
             heading_err = 0
 
+        # Use PID controllers to control velocity of robot relative to amount of error
         angular_vel = self.heading_pid(heading_err)
         linear_vel = self.linear_pid(distance_err)
 
@@ -329,18 +339,17 @@ class NavNode(Node):
         elif self.heading_accept == False and abs(heading_err) < cfg.HEADING_PROCEED_ANGLE_ACCEPT:
             self.heading_accept = True
 
-        if distance_err < cfg.WAYPOINT_ACCEPT_RADIUS and self.follow_waypoint:
+        if distance_err < cfg.WAYPOINT_ACCEPT_RADIUS and self.follow_waypoint: # Stop if waypoint hit and raise flag
             self.waypoint_hit = True
             linear_vel = 0
             angular_vel = 0
-            # if self.goal_point.x == 0: self.goal_point = util.makePoint(1.0, 0.0)
-            # else: self.goal_point = util.makePoint(0.0, 0.0)
-        elif self.heading_accept == False: # Don't move while heading is not accepted
+        elif self.heading_accept == False: # Don't move while heading is not accepted, allows robot to stop and correct heading
             linear_vel = 0
 
         # self.get_logger().info(f"Heading err: {math.degrees(heading_err)} Distance err: {distance_err} Lv: {linear_vel} Av {angular_vel} Acc: {self.heading_accept}")
         # self.get_logger().info(f"Heading err: {math.degrees(heading_err)} Acc: {self.heading_accept}, set {self.heading_set} cur_head{self.get_robot_heading()}")
-        if abs(angular_vel) < 0.05 and linear_vel < 0.1:
+
+        if abs(angular_vel) < 0.05 and linear_vel < 0.1: # Disallow rgbd data above a certain velocity, resolves depth and image data mismatch
             if self.allow_rgbd_data == False: 
                 self.allow_rgbd_from = self.get_clock().now().to_msg()
                 self.allow_rgbd_data = True
@@ -366,9 +375,7 @@ class NavNode(Node):
         msg = Twist()
         msg.linear.x = -0.2
         self.control_pub.publish(msg)
-        self.get_logger().info("Pub rev")
         self.get_clock().sleep_for(Duration(seconds=0.5)) # Allow time to reverse
-        self.get_logger().info("After, setting wp")
 
         self.next_waypoint = False
         self.follow_waypoint = True
@@ -376,13 +383,11 @@ class NavNode(Node):
         return
 
     def check_line_of_sight_srv_cb(self, req: LineOfSight.Request, resp: LineOfSight.Response):
-        self.get_logger().info("Checking line of sight srv")
         resp.clear = self.check_line_of_sight(req.start, req.end, req.ignore_data_source)
         return resp
 
     def check_line_of_sight(self, start: Point, end: Point, ignore_data_source=None):
-        self.get_logger().info("Checking line of sight...")
-        return self.occupancy_grid.line_of_sight(start, end, ignore_data_source)
+        return self.occupancy_grid.check_line_of_sight(start, end, ignore_data_source)
     
     def clear_occupancy_grid_srv_cb(self, req, resp):
         self.occupancy_grid.clear_cells()
@@ -393,10 +398,10 @@ class NavNode(Node):
         result = SearchBoxes.Result()
         result.green_boxes = self.search_boxes_green
         result.red_boxes = self.search_boxes_red
-        self.get_logger().info(f"Boxes: {len(self.search_boxes_green)} {len(self.search_boxes_red)}")
         goal_handler.succeed()
         return result
 
+    # Turns in 45 degree increments and scans for boxes
     def scan_for_boxes(self):
         self.get_logger().info("Scanning for boxes...")
         self.search_boxes_green = []
@@ -437,18 +442,19 @@ class NavNode(Node):
             self.get_clock().sleep_for(Duration(seconds=0.1))
 
         goal_handle.succeed()
-        if not goal_handle.request.hold_after_complete:
-            # self.heading_set = False
-            pass
+        # if not goal_handle.request.hold_after_complete:
+        #     # self.heading_set = False
+        #     pass
         return NavHeading.Result()
     
+    # Set navigation flags for turning to heading
     def set_heading(self, heading):
         self.waypoint_hit = False
         self.heading_accept = False
         self.follow_waypoint = False
         self.no_path_flag = False
         self.goal_point = False
-        if heading == 0.0: heading = 0.001
+        if heading == 0.0: heading = 0.001 # 0.0 == False, use a really small value instead. Should have used None from the start but too late now
         self.heading_set = heading
 
     def set_manual_waypoint_action_handler(self, goal_handle):
@@ -458,6 +464,7 @@ class NavNode(Node):
         goal_handle.succeed()
         return NavLocation.Result()
     
+    # Sets manual waypoint without pathing
     def set_manual_waypoint(self, dest: Point):
         self.goal_point = False
         self.next_waypoint = dest
@@ -476,6 +483,7 @@ class NavNode(Node):
 
         self.get_logger().info(f"Goal finished")
         
+        # Return status on if the goal was reached successfully
         if self.no_path_flag:
             goal_handle.abort()
         else:
@@ -483,7 +491,7 @@ class NavNode(Node):
         
         return NavLocation.Result()
 
-    
+    # Set navigation flags for navigating to a goal destination
     def set_goal_point(self, point: Point):
         self.goal_point = point
         self.follow_waypoint = True
@@ -492,6 +500,7 @@ class NavNode(Node):
         self.waypoint_hit = False
         self.no_path_flag = False
     
+    # Returns the heading a distance error to a point relative to the robots current position and heading
     def get_heading_and_dist_toward_point(self, p: Point):
         # Heading
         x, y = self.get_robot_position()
@@ -520,6 +529,7 @@ class NavNode(Node):
 
         return heading
     
+    # Returns the robots current position in the arena frame
     def get_robot_position(self):
         t: Transform|bool = self.get_base_link_transform()
         if t == False: return 0.0, 0.0

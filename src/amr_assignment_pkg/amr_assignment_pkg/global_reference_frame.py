@@ -49,7 +49,6 @@ class GRFNode(Node):
         # Subscribers
         self.laser_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
         self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 1)
-        # self.clock_sub = self.create_subscription()
 
         # Services
         self.grf_init_srv = self.create_service(Trigger, '/arena/init_frame', self.init_grf_cb)
@@ -106,16 +105,6 @@ class GRFNode(Node):
         
         if odom_data is None: return
         t_odom = odom_data
-
-        # if self.odom_data is None: return
-        # t_odom = self.odom_data
-        # t.transform.rotation.x = 0.0
-        # t.transform.rotation.y = 0.0
-        # t.transform.rotation.z = t_odom.orientation.z
-        # t.transform.rotation.w = t_odom.orientation.w * -1
-        # t.transform.translation.x = -t_odom.position.x
-        # t.transform.translation.y = t_odom.position.y
-        # t.transform.translation.z = -t_odom.position.z
 
         t.transform.rotation.x = 0.0
         t.transform.rotation.y = 0.0

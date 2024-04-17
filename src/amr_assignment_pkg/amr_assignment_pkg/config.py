@@ -1,5 +1,6 @@
 import math
 
+# Config all in one place for maintainability
 class Config:
     ## Global reference frame
     LIDAR_MIN_ANGLE = -2.03

@@ -33,6 +33,7 @@ def is_destination(row, col, dest):
 
 
 # Calculate the heuristic value of a cell (Euclidean distance to destination)
+# Added functionality to path away from obstacles
 def calculate_h_value(row, col, dest, grid):
     offsets = range(-3, 4)
     penalty = 0
@@ -43,6 +44,7 @@ def calculate_h_value(row, col, dest, grid):
     return ((row - dest[0]) ** 2 + (col - dest[1]) ** 2) ** 0.5 + penalty
 
 
+# Converts a full path to waypoints. A full path is not needed, only the locations where the robot stops or changes direction
 def cell_details_to_waypoint_list(cell_details, dest):
     waypoints = []
     row = dest[0]
@@ -57,7 +59,6 @@ def cell_details_to_waypoint_list(cell_details, dest):
         cell_details[row][col].parent_i == row
         and cell_details[row][col].parent_j == col
     ):
-        # waypoints.append((row, col))
         temp_row = cell_details[row][col].parent_i
         temp_col = cell_details[row][col].parent_j
 
@@ -70,9 +71,7 @@ def cell_details_to_waypoint_list(cell_details, dest):
         row = temp_row
         col = temp_col
 
-    # waypoints.append((row, col))
-
-    waypoints.reverse()
+    waypoints.reverse() # Reverse waypoints so they start from the source
     return waypoints
 
 
@@ -201,27 +200,3 @@ def a_star_search(grid, src, dest, node):
     node.get_logger().info("Destination unreachable")
     return [] # No path to destination
 
-
-# def main():
-# 	# Define the grid (1 for unblocked, 0 for blocked)
-# 	grid = [
-# 		[1, 0, 1, 1, 1, 1, 0, 1, 1, 1],
-# 		[1, 1, 1, 0, 1, 1, 1, 0, 1, 1],
-# 		[1, 1, 1, 0, 1, 1, 0, 1, 0, 1],
-# 		[0, 0, 1, 0, 1, 0, 0, 0, 0, 1],
-# 		[1, 1, 1, 0, 1, 1, 1, 0, 1, 0],
-# 		[1, 0, 1, 1, 1, 1, 0, 1, 0, 0],
-# 		[1, 0, 0, 0, 0, 1, 0, 0, 0, 1],
-# 		[1, 0, 1, 1, 1, 1, 0, 1, 1, 1],
-# 		[1, 1, 1, 0, 0, 0, 1, 0, 0, 1]
-# 	]
-
-# 	# Define the source and destination
-# 	src = [8, 0]
-# 	dest = [0, 0]
-
-# 	# Run the A* search algorithm
-# 	a_star_search(grid, src, dest)
-
-# if __name__ == "__main__":
-# 	main()
