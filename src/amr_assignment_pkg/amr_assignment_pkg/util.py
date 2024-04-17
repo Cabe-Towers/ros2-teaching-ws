@@ -18,6 +18,7 @@ def scan_to_cartesian_points(scan_data, angle_min, angle_max) -> list:
 
     points = []
     for idx, dist in enumerate(scan_data):
+        if dist == float('inf'): continue # Sometimes scan data is infinite, looks like a glitch
         # Calculate angle of scan at idx
         angle = (idx/len(scan_data)) * total_angle + angle_min
         # Convert from polar coordinates to cartesian 
