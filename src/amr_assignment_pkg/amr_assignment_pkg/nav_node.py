@@ -213,7 +213,7 @@ class NavNode(Node):
         self.occupancy_grid = OccupancyGrid(3.2, 0.05, 7)
 
         self.heading_pid = PID(2.8, 0, 0, setpoint=0, output_limits=(-cfg.MAX_ANGULAR_VELOCITY, cfg.MAX_ANGULAR_VELOCITY))
-        self.linear_pid = PID(2.8, 0.1, 0, setpoint=0, output_limits=(-cfg.MAX_LINEAR_VELOCITY, cfg.MAX_LINEAR_VELOCITY))
+        self.linear_pid = PID(2.8, 0, 0, setpoint=0, output_limits=(-cfg.MAX_LINEAR_VELOCITY, cfg.MAX_LINEAR_VELOCITY))
 
         self.heading_set = False
         self.next_waypoint: Point = False
